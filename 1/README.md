@@ -16,3 +16,10 @@ ready> Parsed an extern
 ready> ^D
 $
 ```
+
+
+当前代码使用
+```
+clang++ -std=c++11 toy.cpp
+```
+编译通过

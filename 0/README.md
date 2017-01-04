@@ -4,6 +4,7 @@ from http://www.jianshu.com/p/45edd0535aac
 
 ## install llvm
 
+ # xcode-select --install
  # brew install llvm
  # brew link llvm
 

@@ -4,7 +4,7 @@ from http://www.jianshu.com/p/45edd0535aac
 
 ## install llvm
 
- # brew instsall llvm
+ # brew install llvm
  # brew link llvm
 
 ```

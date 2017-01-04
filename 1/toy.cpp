@@ -105,6 +105,99 @@ public:
 };
 
 
+/// 解析的 token 类型枚举，这里都是负数，token 如果不是这里的类型，会返回 0-255 返回的 ascii 码
+enum Token {
+    token_eof = -1,
+    token_def = -2,
+    token_extern = -3,
+    token_identifier = -4,
+    token_number = -5,
+};
+
+/// token 为 token_identifier 时，记下当前的 token 字符串
+static std::string kIdentifierString;
+/// token 为 token_number 时，记下当前的值
+static double kNumberValue;
+/*
+词法解析器主函数
+从 stdin 中返回下一个 token
+enum Token 类型或 0-255 的 ascii 码
+*/
+static int getToken() {
+    static int kLastChar = 0;
+
+    // 跳过空格
+    while (isspace(kLastChar)) {
+        kLastChar = getchar();
+    }
+
+    // [a-zA-Z]
+    if (isalpha(kLastChar)) {
+        // 获取并记录当前这个字符串
+        kIdentifierString = kLastChar;
+        // [a-zA-Z0-9]
+        while (isalnum(kLastChar = getchar())) {
+            kIdentifierString += kLastChar;
+        }
+
+        // 针对当前字符串的值进行判断
+        if (kIdentifierString == "def") {
+            return token_def;
+        } else if (kIdentifierString == "extern") {
+            return token_extern;
+        }
+
+        // 一个普通的字符串很可能是一个标识，比如变量名
+        return token_identifier;
+    }
+    // [0-9\.]
+    else if (isdigit(kLastChar) || kLastChar == '.') {
+        std::string numberString;
+        do {
+            numberString += kLastChar;
+            kLastChar = getchar();
+        } while(isdigit(kLastChar) || kLastChar == '.');
+
+        kNumberValue = strtod(numberString.c_str(), nullptr);
+
+        return token_number;
+    }
+    // # 开头的一行为注释
+    else if (kLastChar == '#') {
+        do {
+            kLastChar = getchar();
+        } while(kLastChar != EOF && kLastChar != '\n' && kLastChar != '\r');
+
+        if (kLastChar != EOF) {
+            return getToken();
+        } else {
+            return token_eof;
+        }
+    }
+    else {
+        if (kLastChar == EOF) {
+            return token_eof;
+        }
+
+        int thisChar = kLastChar;
+        kLastChar = getchar();
+
+        return thisChar;
+    }
+}
+
+/// 当前解析器当前正在解析的 token
+static int kCurToken;
+/*
+从词法分析器获取下一个 token 并更新 kCurToken 等变量
+*/
+static int getNextTokent() {
+    kCurToken = getToken();
+
+    return kCurToken;
+}
+
+
 int main(int argc, char const *argv[]) {
 
     // 测试代码

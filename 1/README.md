@@ -23,3 +23,21 @@ $
 clang++ -std=c++11 toy.cpp
 ```
 编译通过
+
+测试运行结果
+```
+localhost:1 donghongchang$ clang++ -std=c++11 toy.cpp 
+localhost:1 donghongchang$ ./a.out
+ready> def foo(x y) x+foo(y, 4.0);
+ready> Parsed a function definition.
+ready> def foo(x y) x+y y;
+ready> Parsed a function definition.
+ready> Parsed a top-level expr.
+ready> def foo(x y) x+y );
+ready> Parsed a function definition.
+ready> LogError: Unknown token when expecting an expression
+ready> extern sin(a);
+ready> Parsed an extern.
+ready> ^C
+localhost:1 donghongchang$
+```

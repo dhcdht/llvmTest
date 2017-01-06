@@ -1,43 +1,46 @@
-http://llvm.org/docs/tutorial/LangImpl02.html
+# llvm-pass-skeleton
 
-实现能够解析下边 Kaleidoscope 代码的编译器
+from http://www.jianshu.com/p/45edd0535aac
+
+## install llvm
+
+ # xcode-select --install
+ # brew install llvm
+ # brew link llvm
+
 ```
-$ ./a.out
-ready> def foo(x y) x+foo(y, 4.0);
-Parsed a function definition.
-ready> def foo(x y) x+y y;
-Parsed a function definition.
-Parsed a top-level expr
-ready> def foo(x y) x+y );
-Parsed a function definition.
-Error: unknown token when expecting an expression
-ready> extern sin(a);
-ready> Parsed an extern
-ready> ^D
-$
+➜  ~ clang --version
+clang version 3.9.1 (tags/RELEASE_391/final)
+Target: x86_64-apple-darwin16.3.0
+Thread model: posix
+InstalledDir: /usr/local/bin
+➜  ~
 ```
 
+## test llvm
+A completely useless LLVM pass.
 
-当前代码使用
-```
-clang++ -std=c++11 toy.cpp
-```
-编译通过
+Build:
 
-测试运行结果
+    $ mkdir build
+    $ cd build
+    $ cmake ..
+    $ make
+    $ cd ..
+
+Run:
+
+    $ clang -Xclang -load -Xclang build/skeleton/libSkeletonPass.* test.c
+
 ```
-localhost:1 donghongchang$ clang++ -std=c++11 toy.cpp 
-localhost:1 donghongchang$ ./a.out
-ready> def foo(x y) x+foo(y, 4.0);
-ready> Parsed a function definition.
-ready> def foo(x y) x+y y;
-ready> Parsed a function definition.
-ready> Parsed a top-level expr.
-ready> def foo(x y) x+y );
-ready> Parsed a function definition.
-ready> LogError: Unknown token when expecting an expression
-ready> extern sin(a);
-ready> Parsed an extern.
-ready> ^C
-localhost:1 donghongchang$
+➜  0 git:(master) ✗ clang -Xclang -load -Xclang build/skeleton/libSkeletonPass.* test.c
+test.c:4:5: warning: implicitly declaring library function 'printf' with type
+      'int (const char *, ...)' [-Wimplicit-function-declaration]
+    printf("test");
+    ^
+test.c:4:5: note: include the header <stdio.h> or explicitly provide a
+      declaration for 'printf'
+I saw a function called main!
+1 warning generated.
+➜  0 git:(master) ✗
 ```

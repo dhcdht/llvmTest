@@ -4,7 +4,22 @@
 #include <vector>
 #include <map>
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/Value.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Module.h"
 
+
+/// llvm 当前上下文对象
+static llvm::LLVMContext kTheContext;
+/// 用于构建各个 llvm IR 对象，比如函数等
+static llvm::IRBuilder<> kBuilder(kTheContext);
+//static std::unique_ptr<llvm::Module> kTheModule;
+/// 保存变量名与 llvm IR 对象的对应关系
+static std::map<std::string, llvm::Value *> kNamedValue;
+
+
+llvm::Value *logErrorV(const char *str);
 
 /*
 AST : abstract syntax tree 抽象语法树
@@ -14,6 +29,11 @@ ExprAST : 表达式的抽象语法树
 class ExprAST {
 public:
     virtual ~ExprAST() {};
+
+    /*
+    生成并取得 AST 节点对应的 llvm::Value 对象
+    */
+    virtual llvm::Value *codegen() = 0;
 };
 
 /*
@@ -27,6 +47,10 @@ class NumberExprAST : public ExprAST {
 public:
     NumberExprAST(double val)
     : m_val(val) {};
+
+    virtual llvm::Value *codegen() {
+        return llvm::ConstantFP::get(kTheContext, llvm::APFloat(m_val));
+    }
 };
 
 /*
@@ -40,6 +64,15 @@ class VariableExprAST : public ExprAST {
 public:
     VariableExprAST(const std::string &name)
     : m_name(name) {};
+
+    virtual llvm::Value *codegen() {
+        llvm::Value *v = kNamedValue[m_name];
+        if (!v) {
+            logErrorV("Unknown variable name");
+        }
+
+        return v;
+    }
 };
 
 /*
@@ -55,6 +88,48 @@ class BinaryExprAST : public ExprAST {
 public:
     BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs)
     : m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {};
+
+    virtual llvm::Value *codegen() {
+        llvm::Value *lhsValue = m_lhs->codegen();
+        llvm::Value *rhsValue = m_rhs->codegen();
+        if (!lhsValue || !rhsValue) {
+            return nullptr;
+        }
+
+        switch (m_op) {
+            case '+': {
+                return kBuilder.CreateFAdd(lhsValue, rhsValue, "addtmp");
+
+                break;
+            }
+
+            case '-': {
+                return kBuilder.CreateFSub(lhsValue, rhsValue, "subtmp");
+
+                break;
+            }
+
+            case '*': {
+                return kBuilder.CreateFMul(lhsValue, rhsValue, "multmp");
+
+                break;
+            }
+
+            case '<': {
+                lhsValue = kBuilder.CreateFCmpULT(lhsValue, rhsValue, "cmptmp");
+                // 这一步将 bool 对象 0/1 转换为 double 型的 0.0/1.0
+                return kBuilder.CreateUIToFP(lhsValue, llvm::Type::getDoubleTy(kTheContext), "booltmp");
+
+                break;
+            }
+
+            default: {
+                return logErrorV("Invalid binary operator");
+
+                break;
+            }
+        }
+    }
 };
 
 /*
@@ -70,6 +145,11 @@ class CallExprAST : public ExprAST {
 public:
     CallExprAST(const std::string &callee, std::vector<std::unique_ptr<ExprAST>> args)
     : m_callee(callee), m_args(std::move(args)) {};
+
+    virtual llvm::Value *codegen() {
+        // TODO:
+        return nullptr;
+    }
 };
 
 /*
@@ -205,6 +285,12 @@ std::unique_ptr<ExprAST> logError(const char *str) {
 }
 
 std::unique_ptr<PrototypeAST> logErrorP(const char *str) {
+    logError(str);
+
+    return nullptr;
+}
+
+llvm::Value *logErrorV(const char *str) {
     logError(str);
 
     return nullptr;

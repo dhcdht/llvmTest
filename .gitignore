@@ -72,3 +72,4 @@ CTestTestfile.cmake
 *.app
 
 # End of https://www.gitignore.io/api/macos,cmake,c++
+.idea

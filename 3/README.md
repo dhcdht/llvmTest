@@ -33,3 +33,9 @@ entry:
   ret double %addtmp
 }
 ```
+
+当前代码使用
+```
+clang++ -std=c++11 `llvm-config --cxxflags --ldflags --system-libs --libs core` toy.cpp
+```
+编译通过

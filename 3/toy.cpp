@@ -628,24 +628,33 @@ static std::unique_ptr<FunctionAST> parseTopLevelExpr() {
 }
 
 static void handleDefinition() {
-    if (parseDefinition()) {
-        fprintf(stderr, "Parsed a function definition.\n");
+    if (auto functionAST = parseDefinition()) {
+        if (auto *functionIR = functionAST->codegen()) {
+            fprintf(stderr, "Read function definition:");
+            functionIR->dump();
+        }
     } else {
         getNextToken();
     }
 }
 
 static void handleExtern() {
-    if (parseExtern()) {
-        fprintf(stderr, "Parsed an extern.\n");
+    if (auto protoAST = parseExtern()) {
+        if (auto protoIR = protoAST->codegen()) {
+            fprintf(stderr, "Read extern:");
+            protoIR->dump();
+        }
     } else {
         getNextToken();
     }
 }
 
 static void handleTopLevelExpression() {
-    if (parseTopLevelExpr()) {
-        fprintf(stderr, "Parsed a top-level expr.\n");
+    if (auto expressionAST = parseTopLevelExpr()) {
+        if (auto expressionIR = expressionAST->codegen()) {
+            fprintf(stderr, "Read top-level expr:");
+            expressionIR->dump();
+        }
     } else {
         getNextToken();
     }
@@ -706,8 +715,12 @@ int main(int argc, char const *argv[]) {
     fprintf(stderr, "ready> ");
     getNextToken();
 
+    kTheModule = llvm::make_unique<llvm::Module>("My custom jit", kTheContext);
+
     // 开始解析主循环
     mainLoop();
+
+    kTheModule->dump();
 
     return 0;
 }

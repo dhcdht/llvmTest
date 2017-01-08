@@ -3,269 +3,9 @@
 #include <string>
 #include <vector>
 #include <map>
+#include "ExprAST.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/IR/Value.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Verifier.h"
-
-
-/// llvm 当前上下文对象
-static llvm::LLVMContext kTheContext;
-/// 用于构建各个 llvm IR 对象，比如函数等
-static llvm::IRBuilder<> kBuilder(kTheContext);
-/// 当前模块，当前所有函数都在同一模块中
-static std::unique_ptr<llvm::Module> kTheModule;
-/// 保存变量名与 llvm IR 对象的对应关系
-static std::map<std::string, llvm::Value *> kNamedValue;
-
-
-llvm::Value *logErrorV(const char *str);
-
-/*
-AST : abstract syntax tree 抽象语法树
-ExprAST : 表达式的抽象语法树
-所有表达式节点的基类
-*/
-class ExprAST {
-public:
-    virtual ~ExprAST() {};
-
-    /*
-    生成并取得 AST 节点对应的 llvm::Value 对象
-    */
-    virtual llvm::Value *codegen() = 0;
-};
-
-/*
-数字常量节点
-比如 "1.0"
-*/
-class NumberExprAST : public ExprAST {
-    /// 常量值
-    double m_val;
-
-public:
-    NumberExprAST(double val)
-    : m_val(val) {};
-
-    virtual llvm::Value *codegen() {
-        return llvm::ConstantFP::get(kTheContext, llvm::APFloat(m_val));
-    }
-};
-
-/*
-变量节点
-比如 "a"
-*/
-class VariableExprAST : public ExprAST {
-    /// 变量名
-    std::string m_name;
-
-public:
-    VariableExprAST(const std::string &name)
-    : m_name(name) {};
-
-    virtual llvm::Value *codegen() {
-        llvm::Value *v = kNamedValue[m_name];
-        if (!v) {
-            logErrorV("Unknown variable name");
-        }
-
-        return v;
-    }
-};
-
-/*
-二元操作节点
-比如 "+"
-*/
-class BinaryExprAST : public ExprAST {
-    /// 操作符
-    char m_op;
-    /// 操作符左右的表达式
-    std::unique_ptr<ExprAST> m_lhs, m_rhs;
-
-public:
-    BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs)
-    : m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {};
-
-    virtual llvm::Value *codegen() {
-        llvm::Value *lhsValue = m_lhs->codegen();
-        llvm::Value *rhsValue = m_rhs->codegen();
-        if (!lhsValue || !rhsValue) {
-            return nullptr;
-        }
-
-        switch (m_op) {
-            case '+': {
-                return kBuilder.CreateFAdd(lhsValue, rhsValue, "addtmp");
-
-                break;
-            }
-
-            case '-': {
-                return kBuilder.CreateFSub(lhsValue, rhsValue, "subtmp");
-
-                break;
-            }
-
-            case '*': {
-                return kBuilder.CreateFMul(lhsValue, rhsValue, "multmp");
-
-                break;
-            }
-
-            case '<': {
-                lhsValue = kBuilder.CreateFCmpULT(lhsValue, rhsValue, "cmptmp");
-                // 这一步将 bool 对象 0/1 转换为 double 型的 0.0/1.0
-                return kBuilder.CreateUIToFP(lhsValue, llvm::Type::getDoubleTy(kTheContext), "booltmp");
-
-                break;
-            }
-
-            default: {
-                return logErrorV("Invalid binary operator");
-
-                break;
-            }
-        }
-    }
-};
-
-/*
-函数调用表达式节点
-比如 "func()"
-*/
-class CallExprAST : public ExprAST {
-    /// 被调用函数名
-    std::string m_callee;
-    /// 各个参数的表达式
-    std::vector<std::unique_ptr<ExprAST>> m_args;
-
-public:
-    CallExprAST(const std::string &callee, std::vector<std::unique_ptr<ExprAST>> args)
-    : m_callee(callee), m_args(std::move(args)) {};
-
-    virtual llvm::Value *codegen() {
-        // 取的要调用的函数
-        llvm::Function *calleeFunc = kTheModule->getFunction(m_callee);
-        if (!calleeFunc) {
-            return logErrorV("Unknown function referenced");
-        }
-
-        if (calleeFunc->arg_size() != m_args.size()) {
-            return logErrorV("Incorrect # arguments passed");
-        }
-
-        // 将各个参数对应设置上
-        std::vector<llvm::Value *> argsValue;
-        for (unsigned long i = 0; i < m_args.size(); ++i) {
-            argsValue.push_back(m_args[i]->codegen());
-            if (!argsValue.back()) {
-                return nullptr;
-            }
-        }
-
-        // 创建函数调用的 llvm IR 代码
-        return kBuilder.CreateCall(calleeFunc, argsValue, "calltmp");
-    }
-};
-
-/*
-函数定义节点
-这不是一个表达式
-保存了函数名和参数
-*/
-class PrototypeAST {
-    /// 函数名
-    std::string m_name;
-    /// 各个参数名
-    std::vector<std::string> m_args;
-
-public:
-    PrototypeAST(const std::string &name, std::vector<std::string> args)
-    : m_name(name), m_args(std::move(args)) {};
-
-    std::string getName() {
-        return m_name;
-    }
-
-    llvm::Function *codegen() {
-        std::vector<llvm::Type *> doubles(m_args.size(), llvm::Type::getDoubleTy(kTheContext));
-        llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getDoubleTy(kTheContext), doubles,
-                                                                   false);
-        // 在当前模块中创建函数
-        llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, m_name,
-                                                          kTheModule.get());
-
-        // 设置各个参数名
-        unsigned long index = 0;
-        for (auto &arg : function->args()) {
-            arg.setName(m_args[index++]);
-        }
-
-        return function;
-    }
-};
-
-/*
-函数实现节点
-这不是一个表达式
-保存了函数原型和函数实现内容的所有表达式节点
-*/
-class FunctionAST {
-    /// 函数定义
-    std::unique_ptr<PrototypeAST> m_prototype;
-    /// 函数实现内容的各个表达式
-    std::unique_ptr<ExprAST> m_body;
-
-public:
-    FunctionAST(std::unique_ptr<PrototypeAST> prototype, std::unique_ptr<ExprAST> body)
-    : m_prototype(std::move(prototype)), m_body(std::move(body)) {};
-
-    llvm::Function *codegen() {
-        // 看函数是否已经创建过，如果没有的话，创建一个
-        llvm::Function *theFunction = kTheModule->getFunction(m_prototype->getName());
-        if (!theFunction) {
-            theFunction = m_prototype->codegen();
-        }
-
-        if (!theFunction) {
-            return nullptr;
-        }
-
-        // 函数不应该被重复实现，如果原来实现过，说明有问题
-        if (!theFunction->empty()) {
-            return (llvm::Function*)logErrorV("Function cannot be redefined");
-        }
-
-        // 创建函数实现
-        llvm::BasicBlock *basicBlock = llvm::BasicBlock::Create(kTheContext, "entry", theFunction);
-        kBuilder.SetInsertPoint(basicBlock);
-
-        // 记录参数名与其对应的 llvm::Value 对象
-        kNamedValue.clear();
-        for (auto &arg : theFunction->args()) {
-            kNamedValue[arg.getName()] = &arg;
-        }
-
-        // 函数内部实现对应的 llvm IR 代码和返回值设定
-        if (llvm::Value *retVal = m_body->codegen()) {
-            kBuilder.CreateRet(retVal);
-
-            // 使用 llvm 自带的函数验证当前的函数是否有问题
-            llvm::verifyFunction(*theFunction);
-
-            return theFunction;
-        }
-
-        // 函数实现创建有问题的时候，去掉模块中对应的函数定义
-        theFunction->eraseFromParent();
-        return nullptr;
-    }
-};
+#include "llvm/IR/Function.h"
 
 
 /// 解析的 token 类型枚举，这里都是负数，token 如果不是这里的类型，会返回 0-255 返回的 ascii 码
@@ -368,12 +108,6 @@ std::unique_ptr<ExprAST> logError(const char *str) {
 }
 
 std::unique_ptr<PrototypeAST> logErrorP(const char *str) {
-    logError(str);
-
-    return nullptr;
-}
-
-llvm::Value *logErrorV(const char *str) {
     logError(str);
 
     return nullptr;
@@ -711,16 +445,18 @@ int main(int argc, char const *argv[]) {
         kBinaryOPPrecedence['*'] = 40;
     }
 
+    // 初始化 llvm 环境
+    initLLVMContext();
+
     // 写上初始的提示文本
     fprintf(stderr, "ready> ");
     getNextToken();
 
-    kTheModule = llvm::make_unique<llvm::Module>("My custom jit", kTheContext);
-
     // 开始解析主循环
     mainLoop();
 
-    kTheModule->dump();
+    // dump 出当前 llvm IR 中已经生成的所有代码
+    dumpLLVMContext();
 
     return 0;
 }

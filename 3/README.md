@@ -36,13 +36,16 @@ entry:
 
 当前代码使用
 ```
-clang++ -std=c++11 `llvm-config --cxxflags --ldflags --system-libs --libs core` toy.cpp
+$ mkdir build
+$ cd build
+$ cmake ..
+$ make
+$ ./llvmTest3
 ```
 编译通过
 测试运行结果
 ```
-localhost:3 donghongchang$ clang++ -std=c++11 `llvm-config --cxxflags --ldflags --system-libs --libs core` toy.cpp
-localhost:3 donghongchang$ ./a.out 
+localhost:3 donghongchang$ ./llvmTest3
 ready> 4+5;
 ready> Read top-level expr:
 define double @0() {

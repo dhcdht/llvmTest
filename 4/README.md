@@ -30,3 +30,7 @@ entry:
 ```
 
 顺便重构优化一下结构
+
+另一部分是实现一个 JIT Compiler (即时翻译器)，类似解释器，
+输入 1+2 时会输出结果 3，类似 python 等的 console 效果
+但是由于用到的 KaleidoscopeJIT 在后边才会实现，所以暂时不加入

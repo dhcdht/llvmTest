@@ -24,6 +24,10 @@ enum Token {
     // 循环控制关键字
     token_for = -9,
     token_in = -10,
+
+    // 用户自定义运算符的关键字
+    token_binary = -11, // 二元
+    token_unary = -12,  // 一元
 };
 
 /// token 为 token_identifier 时，记下当前的 token 字符串
@@ -67,6 +71,10 @@ static int getToken() {
             return token_for;
         } else if (kIdentifierString == "in") {
             return token_in;
+        } else if (kIdentifierString == "binary") {
+            return token_binary;
+        } else if (kIdentifierString == "unary") {
+            return token_unary;
         }
 
         // 一个普通的字符串很可能是一个标识，比如变量名

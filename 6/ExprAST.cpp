@@ -217,13 +217,26 @@ llvm::Value *IfExprAST::codegen() {
 }
 
 
-PrototypeAST::PrototypeAST(const std::string &name, std::vector<std::string> args)
-        : m_name(name), m_args(std::move(args)) {
+PrototypeAST::PrototypeAST(const std::string &name, std::vector<std::string> args, bool isOperator,
+                           unsigned int precedence)
+        : m_name(name), m_args(std::move(args)), m_isOperator(isOperator), m_precedence(precedence) {
 
 }
 
 std::string PrototypeAST::getName() {
     return m_name;
+}
+
+bool PrototypeAST::isUnaryOperator() {
+    return m_isOperator && m_args.size() == 1;
+}
+
+bool PrototypeAST::isBinaryOperator() {
+    return m_isOperator && m_args.size() == 2;
+}
+
+unsigned PrototypeAST::getBinaryPrecedence() {
+    return m_precedence;
 }
 
 llvm::Function* PrototypeAST::codegen() {

@@ -153,11 +153,22 @@ private:
     std::string m_name;
     /// 各个参数名
     std::vector<std::string> m_args;
+    /// 是否是一个运算符
+    bool m_isOperator;
+    /// 针对二元运算符的优先级
+    unsigned m_precedence;
 
 public:
-    PrototypeAST(const std::string &name, std::vector<std::string> args);
+    PrototypeAST(const std::string &name, std::vector<std::string> args, bool isOperator = false, unsigned precedence = 0);
 
+    /// 返回函数名
     std::string getName();
+    /// 返回函数是否是一元运算符
+    bool isUnaryOperator();
+    /// 返回函数是否是二元运算符
+    bool isBinaryOperator();
+    /// 返回二元运算符的优先级
+    unsigned getBinaryPrecedence();
 
     llvm::Function *codegen();
 };

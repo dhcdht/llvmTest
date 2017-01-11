@@ -38,4 +38,32 @@ ready>
 localhost:build donghongchang$ 
 ```
 
+实现 for in 循环语句
+测试运行
+```
+localhost:build donghongchang$ ./llvmTest5 
+ready> extern f(c);
+ready> Read extern:
+declare double @f(double %c)
 
+ready> def pr(n) for i = 1, i < n, 1.0 in f(1);       
+ready> Read function definition:
+define double @pr(double %n) {
+entry:
+  br label %loop
+
+loop:                                             ; preds = %loop, %entry
+  %i = phi double [ 1.000000e+00, %entry ], [ %nextvar, %loop ]
+  %calltmp = call double @f(double 1.000000e+00)
+  %nextvar = fadd double %i, 1.000000e+00
+  %cmptmp = fcmp ult double %i, %n
+  %booltmp = uitofp i1 %cmptmp to double
+  %loopcond = fcmp one double %booltmp, 1.000000e+00
+  br i1 %loopcond, label %loop, label %afterloop
+
+afterloop:                                        ; preds = %loop
+  ret double 0.000000e+00
+}
+
+ready>
+```

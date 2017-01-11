@@ -261,6 +261,59 @@ static std::unique_ptr<ExprAST> parseIfExpr() {
     return llvm::make_unique<IfExprAST>(std::move(condition), std::move(then), std::move(elseExpression));
 }
 
+/**
+ * 解析 for in 写法
+ */
+static std::unique_ptr<ExprAST> parseForExpr() {
+    getNextToken();
+    if (kCurToken != token_identifier) {
+        return logError("Expected identifier after for");
+    }
+    std::string idName = kIdentifierString;
+
+    getNextToken();
+    if (kCurToken != '=') {
+        return logError("Expected '=' after for");
+    }
+
+    getNextToken();
+    auto start = parseExpression();
+    if (nullptr == start) {
+        return nullptr;
+    }
+    if (kCurToken != ',') {
+        return logError("Expected ',' after for start value");
+    }
+
+    getNextToken();
+    auto end = parseExpression();
+    if (!end) {
+        return nullptr;
+    }
+
+    // step 是可选的
+    std::unique_ptr<ExprAST> step;
+    if (kCurToken == ',') {
+        getNextToken();
+        step = parseExpression();
+        if (!step) {
+            return nullptr;
+        }
+    }
+
+    if (kCurToken != token_in) {
+        return logError("Expected 'in' after for");
+    }
+
+    getNextToken();
+    auto body = parseExpression();
+    if (!body) {
+        return nullptr;
+    }
+
+    return llvm::make_unique<ForExprAST>(idName, std::move(start), std::move(end), std::move(step), std::move(body));
+}
+
 /*
 解析 token 的主函数
 */
@@ -280,6 +333,10 @@ static std::unique_ptr<ExprAST> parsePrimary() {
 
         case token_if: {
             return parseIfExpr();
+        } break;
+
+        case token_for: {
+            return parseForExpr();
         } break;
 
         default: {

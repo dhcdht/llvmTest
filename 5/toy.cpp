@@ -21,6 +21,9 @@ enum Token {
     token_then = -7,
     token_else = -8,
 
+    // 循环控制关键字
+    token_for = -9,
+    token_in = -10,
 };
 
 /// token 为 token_identifier 时，记下当前的 token 字符串
@@ -60,6 +63,10 @@ static int getToken() {
             return token_then;
         } else if (kIdentifierString == "else") {
             return token_else;
+        } else if (kIdentifierString == "for") {
+            return token_for;
+        } else if (kIdentifierString == "in") {
+            return token_in;
         }
 
         // 一个普通的字符串很可能是一个标识，比如变量名

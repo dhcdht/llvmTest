@@ -122,6 +122,26 @@ public:
 };
 
 
+/**
+ * 循环语句的表达式
+ * for in
+ */
+class ForExprAST : public ExprAST {
+private:
+    std::string m_varName;
+    std::unique_ptr<ExprAST> m_start;
+    std::unique_ptr<ExprAST> m_end;
+    std::unique_ptr<ExprAST> m_step;
+    std::unique_ptr<ExprAST> m_body;
+
+public:
+    ForExprAST(const std::string &varName, std::unique_ptr<ExprAST> start, std::unique_ptr<ExprAST> end,
+               std::unique_ptr<ExprAST> step, std::unique_ptr<ExprAST> body);
+
+    virtual llvm::Value *codegen() override;
+};
+
+
 /*
 函数定义节点
 这不是一个表达式

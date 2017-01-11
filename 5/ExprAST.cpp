@@ -176,7 +176,7 @@ llvm::Value *IfExprAST::codegen() {
     llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(kTheContext, "else");
     llvm::BasicBlock *mergeBlock = llvm::BasicBlock::Create(kTheContext, "ifcont");
 
-    // 创建分支语句
+    // 当前函数的插入点上，插入执行分支语句的代码
     kBuilder.CreateCondBr(conditionValue, thenBlock, elseBlock);
 
     // 给 then 代码块添加 IR 代码
@@ -288,4 +288,87 @@ llvm::Function* FunctionAST::codegen() {
     // 函数实现创建有问题的时候，去掉模块中对应的函数定义
     theFunction->eraseFromParent();
     return nullptr;
+}
+
+
+ForExprAST::ForExprAST(const std::string &varName, std::unique_ptr<ExprAST> start, std::unique_ptr<ExprAST> end,
+                       std::unique_ptr<ExprAST> step, std::unique_ptr<ExprAST> body)
+        : m_varName(varName), m_start(std::move(start)), m_end(std::move(end)), m_step(std::move(step)),
+          m_body(std::move(body)) {
+}
+
+llvm::Value* ForExprAST::codegen() {
+    llvm::Value *startValue = m_start->codegen();
+    if (nullptr == startValue) {
+        return nullptr;
+    }
+
+    // 在当前函数后边加上我们将要生成的 for 循环 block
+    llvm::Function *function = kBuilder.GetInsertBlock()->getParent();
+    llvm::BasicBlock *preheaderBlock = kBuilder.GetInsertBlock();
+    llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(kTheContext, "loop", function);
+
+    // 当前函数插入点上，插入运行当前分支语句的代码
+    kBuilder.CreateBr(loopBlock);
+    // 开始往循环中插入代码
+    kBuilder.SetInsertPoint(loopBlock);
+
+    // 分支进入与否同样涉及 SSA (静态单赋值) 问题，所以这里用 phi node 确定进入与不进入循环不同的两个路径
+    // 这里添加的是不进入循环的走法
+    llvm::PHINode *variable = kBuilder.CreatePHI(llvm::Type::getDoubleTy(kTheContext), 2, m_varName.c_str());
+    variable->addIncoming(startValue, preheaderBlock);
+
+    // 如果在循环中循环变量覆盖了当前作用域的变量，我们需要在循环结束后恢复那个变量，所以现在先记住它旧的值
+    llvm::Value *oldValue = kNamedValue[m_varName];
+    kNamedValue[m_varName] = variable;
+
+    if (nullptr == m_body->codegen()) {
+        return nullptr;
+    }
+
+    // 生成循环变量步进的代码
+    llvm::Value *stepValue = nullptr;
+    if (m_step) {
+        stepValue = m_step->codegen();
+        if (nullptr == stepValue) {
+            return nullptr;
+        }
+    } else {
+        // 如果没有步进，那么步进默认为 1.0
+        stepValue = llvm::ConstantFP::get(kTheContext, llvm::APFloat(1.0));
+    }
+
+    // 对循环变量执行步进
+    llvm::Value *nextValue = kBuilder.CreateFAdd(variable, stepValue, "nextvar");
+
+    // 循环结束条件
+    llvm::Value *endCondition = m_end->codegen();
+    if (nullptr == endCondition) {
+        return nullptr;
+    }
+
+    // 循环结束条件与 true(1.0) 判断
+    endCondition = kBuilder.CreateFCmpONE(endCondition, llvm::ConstantFP::get(kTheContext, llvm::APFloat(1.0)),
+                                          "loopcond");
+
+    // 为 phi 记一下循环结束的地方
+    llvm::BasicBlock *loopEndBlock = kBuilder.GetInsertBlock();
+    // 创建分支语句，符合结束条件走 after block 不符合继续走 loop block
+    llvm::BasicBlock *afterBlock = llvm::BasicBlock::Create(kTheContext, "afterloop", function);
+    kBuilder.CreateCondBr(endCondition, loopBlock, afterBlock);
+
+    // 将后边的代码添加地点放到循环结束后
+    kBuilder.SetInsertPoint(afterBlock);
+
+    // 如果进入循环的话，最后会从 loopEndBlock 结束，这也是 phi node 的一个路径，用它完成 phi node
+    variable->addIncoming(nextValue, loopEndBlock);
+
+    if (oldValue) {
+        kNamedValue[m_varName] = oldValue;
+    } else {
+        kNamedValue.erase(m_varName);
+    }
+
+    // for 循环作为表达式，整体对外的值永远是 0.0
+    return llvm::Constant::getNullValue(llvm::Type::getDoubleTy(kTheContext));
 }

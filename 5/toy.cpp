@@ -15,6 +15,12 @@ enum Token {
     token_extern = -3,
     token_identifier = -4,
     token_number = -5,
+
+    // 控制流关键字
+    token_if = -6,
+    token_then = -7,
+    token_else = -8,
+
 };
 
 /// token 为 token_identifier 时，记下当前的 token 字符串
@@ -43,11 +49,17 @@ static int getToken() {
             kIdentifierString += kLastChar;
         }
 
-        // 针对当前字符串的值进行判断
+        // 针对当前字符串的值进行判断，这部分都是一些语言的关键字
         if (kIdentifierString == "def") {
             return token_def;
         } else if (kIdentifierString == "extern") {
             return token_extern;
+        } else if (kIdentifierString == "if") {
+            return token_if;
+        } else if (kIdentifierString == "then") {
+            return token_then;
+        } else if (kIdentifierString == "else") {
+            return token_else;
         }
 
         // 一个普通的字符串很可能是一个标识，比如变量名
@@ -205,6 +217,43 @@ static int getTokenPrecedence() {
     }
 }
 
+/**
+ * 解析 if then else 这样的写法
+ */
+static std::unique_ptr<ExprAST> parseIfExpr() {
+    // 走过 if
+    getNextToken();
+
+    auto condition = parseExpression();
+    if (!condition) {
+        return nullptr;
+    }
+
+    if (kCurToken != token_then) {
+        return logError("Expected then");
+    }
+    // 走过 then
+    getNextToken();
+
+    auto then = parseExpression();
+    if (!then) {
+        return nullptr;
+    }
+
+    if (kCurToken != token_else) {
+        return logError("Expecte else");
+    }
+    // 走过 else
+    getNextToken();
+
+    auto elseExpression = parseExpression();
+    if (!elseExpression) {
+        return nullptr;
+    }
+
+    return llvm::make_unique<IfExprAST>(std::move(condition), std::move(then), std::move(elseExpression));
+}
+
 /*
 解析 token 的主函数
 */
@@ -220,6 +269,10 @@ static std::unique_ptr<ExprAST> parsePrimary() {
 
         case '(': {
             return parseParentExpr();
+        } break;
+
+        case token_if: {
+            return parseIfExpr();
         } break;
 
         default: {

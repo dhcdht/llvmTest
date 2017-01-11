@@ -106,6 +106,23 @@ public:
 
 
 /*
+ * 分支语句的表达式
+ * if/then/else
+ */
+class IfExprAST : public ExprAST {
+private:
+    std::unique_ptr<ExprAST> m_condition;
+    std::unique_ptr<ExprAST> m_then;
+    std::unique_ptr<ExprAST> m_else;
+
+public:
+    IfExprAST(std::unique_ptr<ExprAST> condition, std::unique_ptr<ExprAST> then, std::unique_ptr<ExprAST> elseExpr);
+
+    virtual llvm::Value *codegen() override;
+};
+
+
+/*
 函数定义节点
 这不是一个表达式
 保存了函数名和参数

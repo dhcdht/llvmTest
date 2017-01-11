@@ -144,6 +144,78 @@ llvm::Value* CallExprAST::codegen() {
     return kBuilder.CreateCall(calleeFunc, argsValue, "calltmp");
 }
 
+IfExprAST::IfExprAST(std::unique_ptr<ExprAST> condition, std::unique_ptr<ExprAST> then,
+                     std::unique_ptr<ExprAST> elseExpr)
+        : m_condition(std::move(condition)), m_then(std::move(then)), m_else(std::move(elseExpr)) {
+
+}
+
+/*
+ * 分支语句 llvm IR 代码结构如下
+ *       True ->    then ->
+ * entry                    ifcont
+ *       False ->   else ->
+ * llvm 会使用 SSA 机制，即静态单赋值，意思是所有变量只能被复制一次，便于后期代码优化
+ * 这样，就需要 ifcont 来根据上一步运行的是 then 还是 else 来分别处理后续的赋值步骤
+ */
+llvm::Value *IfExprAST::codegen() {
+    llvm::Value *conditionValue = m_condition->codegen();
+    if (!conditionValue) {
+        return nullptr;
+    }
+
+    // 作为条件表达式，我们需要把它的值转换为 bool 类型，这里使用 0.0 来进行比较
+    conditionValue = kBuilder.CreateFCmpONE(conditionValue, llvm::ConstantFP::get(kTheContext, llvm::APFloat(0.0)), "ifcondition");
+
+    // 当前分支语句的总函数
+    llvm::Function *function = kBuilder.GetInsertBlock()->getParent();
+
+    // 分别创建 the else ifcont 的代码块，此时还没有向其中添加真是的 IR 代码
+    // 第一句创建 thenBlock 时顺便将 thenBlock 挂到了 function 上
+    llvm::BasicBlock *thenBlock = llvm::BasicBlock::Create(kTheContext, "then", function);
+    llvm::BasicBlock *elseBlock = llvm::BasicBlock::Create(kTheContext, "else");
+    llvm::BasicBlock *mergeBlock = llvm::BasicBlock::Create(kTheContext, "ifcont");
+
+    // 创建分支语句
+    kBuilder.CreateCondBr(conditionValue, thenBlock, elseBlock);
+
+    // 给 then 代码块添加 IR 代码
+    kBuilder.SetInsertPoint(thenBlock);
+    llvm::Value *theValue = m_then->codegen();
+    if (!theValue) {
+        return nullptr;
+    }
+
+    // then 代码块完成后运行 mergeBlock
+    kBuilder.CreateBr(mergeBlock);
+    // 此时 then 代码块的内容已经改变了，后边 phi 还要用到它，所以更新一下
+    thenBlock = kBuilder.GetInsertBlock();
+
+    // 将 elseBlock 挂到 function 上
+    function->getBasicBlockList().push_back(elseBlock);
+    // 给 else 代码块添加 IR 代码
+    kBuilder.SetInsertPoint(elseBlock);
+    llvm::Value *elseValue = m_else->codegen();
+    if (!elseValue) {
+        return nullptr;
+    }
+
+    // else 代码块完成后运行 mergeBlock
+    kBuilder.CreateBr(mergeBlock);
+    // 此时 else 代码块的内容已经改变了，后边 phi 还要用到它，所以更新一下
+    elseBlock = kBuilder.GetInsertBlock();
+
+    // 给 mergeBlock 添加 IR 代码
+    function->getBasicBlockList().push_back(mergeBlock);
+    kBuilder.SetInsertPoint(mergeBlock);
+    // 使用 PHI 创建分支语句最后的 IR 代码
+    llvm::PHINode *phiNode = kBuilder.CreatePHI(llvm::Type::getDoubleTy(kTheContext), 2, "iftmp");
+    phiNode->addIncoming(theValue, thenBlock);
+    phiNode->addIncoming(elseValue, elseBlock);
+
+    return phiNode;
+}
+
 
 PrototypeAST::PrototypeAST(const std::string &name, std::vector<std::string> args)
         : m_name(name), m_args(std::move(args)) {

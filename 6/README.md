@@ -28,3 +28,27 @@ entry:
 
 ready>
 ```
+
+
+实现自定义一元运算符
+测试运行
+```
+// 自定义 "!" 运算符
+define double @"unary!"(double %x) {
+entry:
+  %ifcondition = fcmp one double %x, 0.000000e+00
+  br i1 %ifcondition, label %then, label %else
+
+then:                                             ; preds = %entry
+  br label %ifcont
+
+else:                                             ; preds = %entry
+  br label %ifcont
+
+ifcont:                                           ; preds = %else, %then
+  %iftmp = phi double [ 0.000000e+00, %then ], [ 1.000000e+00, %else ]
+  ret double %iftmp
+}
+
+ready> 
+```

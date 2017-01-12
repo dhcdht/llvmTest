@@ -10,6 +10,8 @@
 #include "llvm/IR/Verifier.h"
 
 
+std::map<char, int> kBinaryOPPrecedence;
+
 /// llvm 当前上下文对象
 static llvm::LLVMContext kTheContext;
 /// 用于构建各个 llvm IR 对象，比如函数等
@@ -67,6 +69,28 @@ llvm::Value* VariableExprAST::codegen() {
 }
 
 
+UnaryExprAST::UnaryExprAST(char operatorCode, std::unique_ptr<ExprAST> operand)
+        : m_operatorCode(operatorCode), m_operand(std::move(operand)) {
+
+}
+
+llvm::Value* UnaryExprAST::codegen() {
+    llvm::Value *operandValue = m_operand->codegen();
+    if (!operandValue) {
+        return nullptr;
+    }
+
+    // 根据一元运算符的名字查找对应的函数
+    std::string functionName = std::string("unary") + m_operatorCode;
+    llvm::Function *function = kTheModule->getFunction(functionName);
+    if (!function) {
+        return logErrorV("Unknown unary operator");
+    }
+
+    return kBuilder.CreateCall(function, operandValue, "unop");
+}
+
+
 BinaryExprAST::BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs)
         : m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {
 
@@ -107,7 +131,18 @@ llvm::Value* BinaryExprAST::codegen() {
         }
 
         default: {
-            return logErrorV("Invalid binary operator");
+            // 如果进入这里，说明这很可能是一个重写的二元运算符
+
+            // 运算符函数名
+            std::string functionName = std::string("binary") + m_op;
+            llvm::Function *function = kTheModule->getFunction(functionName);
+            if (nullptr == function) {
+                return logErrorV("Binary operator not found!");
+            }
+
+            // 创建函数调用 IR 代码
+            llvm::Value *operators[] = {lhsValue, rhsValue};
+            return kBuilder.CreateCall(function, llvm::makeArrayRef(operators), "binop");
 
             break;
         }
@@ -227,6 +262,10 @@ std::string PrototypeAST::getName() {
     return m_name;
 }
 
+char PrototypeAST::getOperatorName() {
+    return m_name[m_name.size() - 1];
+}
+
 bool PrototypeAST::isUnaryOperator() {
     return m_isOperator && m_args.size() == 1;
 }
@@ -286,6 +325,11 @@ llvm::Function* FunctionAST::codegen() {
     kNamedValue.clear();
     for (auto &arg : theFunction->args()) {
         kNamedValue[arg.getName()] = &arg;
+    }
+
+    // 对于二元运算符，我们要存储它的优先级
+    if (m_prototype->isBinaryOperator()) {
+        kBinaryOPPrecedence[m_prototype->getOperatorName()] = m_prototype->getBinaryPrecedence();
     }
 
     // 函数内部实现对应的 llvm IR 代码和返回值设定

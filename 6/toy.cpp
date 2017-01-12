@@ -214,8 +214,7 @@ static std::unique_ptr<ExprAST> parseIdentifierExpr() {
     return llvm::make_unique<CallExprAST>(identifierName, std::move(args));
 }
 
-/// 储存了各个操作符的优先级
-static std::map<char, int> kBinaryOPPrecedence;
+
 /*
 取的当前 token 的优先级
 */
@@ -353,6 +352,25 @@ static std::unique_ptr<ExprAST> parsePrimary() {
     }
 }
 
+/**
+ * 解析一元运算符表达式
+ */
+static std::unique_ptr<ExprAST> parseUnary() {
+    // 如果当前字符不是一个合法的一元运算符，那么交给其他解析去处理
+    if (!isascii(kCurToken) || kCurToken == '(' || kCurToken == ',') {
+        return parsePrimary();
+    }
+
+    // 记录当前一元运算符的 ascii 码
+    int operatorChar = kCurToken;
+    // 记录一元运算符的运算对象
+    getNextToken();
+    if (auto operand = parseUnary()) {
+        return llvm::make_unique<UnaryExprAST>(operatorChar, std::move(operand));
+    }
+    return nullptr;
+}
+
 /*
 解析表达式
 递归的使用自身解析
@@ -374,7 +392,8 @@ static std::unique_ptr<ExprAST> parseBinaryOPRHS(int exprPrecedence, std::unique
         int binaryOP = kCurToken;
         getNextToken();
 
-        auto rhs = parsePrimary();
+        // 此处也优先查看右值是否是一个一元运算符的计算
+        auto rhs = parseUnary();
         if (!rhs) {
             return nullptr;
         }
@@ -404,7 +423,8 @@ static std::unique_ptr<ExprAST> parseBinaryOPRHS(int exprPrecedence, std::unique
 递归的使用 parseBinaryOPRHS 实现解析
 */
 static std::unique_ptr<ExprAST> parseExpression() {
-    auto lhs = parsePrimary();
+    // 优先查看其是否是一个一元运算符，parseUnary() 中会检查 parsePrimary
+    auto lhs = parseUnary();
     if (!lhs) {
         return nullptr;
     }
@@ -413,21 +433,100 @@ static std::unique_ptr<ExprAST> parseExpression() {
     return parseBinaryOPRHS(0, std::move(lhs));
 }
 
-/*
-解析 func(a, b, c) 这种写法，即函数定义
-*/
+/**
+ * 解析 func(a, b, c) 这种写法，即函数定义
+ * 解析二元运算符的函数定义
+ * @return
+ */
 static std::unique_ptr<PrototypeAST> parsePrototype() {
-    if (kCurToken != token_identifier) {
-        return logErrorP("Expected function name in prototype");
+//    if (kCurToken != token_identifier) {
+//        return logErrorP("Expected function name in prototype");
+//    }
+//
+//    std::string functionName = kIdentifierString;
+//    getNextToken();
+//
+//    if (kCurToken != '(') {
+//        return logErrorP("Expected '(' in prototype");
+//    }
+//
+//    std::vector<std::string> argNames;
+//    while (getNextToken() == token_identifier) {
+//        argNames.push_back(kIdentifierString);
+//    }
+//    if (kCurToken != ')') {
+//        return logErrorP("Expected ')' in prototype");
+//    }
+//
+//    // 下次该解析 ')' 后边的东西了，这个 getNextToken 提前拿出 ‘)’
+//    getNextToken();
+//
+//    return llvm::make_unique<PrototypeAST>(functionName, std::move(argNames));
+    // 记录函数名
+    std::string functionName;
+    // 函数类型定义
+    enum FunctionKind {
+        // 普通函数
+        Identifier = 0,
+        // 一元运算符
+        Unary = 1,
+        // 二元运算符
+        Binary = 2,
+    };
+    // 记录函数类型
+    FunctionKind kind = Identifier;
+    // 记录二元运算符的优先级
+    unsigned binaryPrecedence = 30;
+
+    switch (kCurToken) {
+        case token_identifier: {
+            functionName = kIdentifierString;
+            kind = Identifier;
+            getNextToken();
+        } break;
+
+        case token_unary: {
+            getNextToken();
+            if (!isascii(kCurToken)) {
+                return logErrorP("Expected unary operator");
+            }
+
+            functionName = "unary";
+            functionName += kCurToken;
+            kind = Unary;
+            getNextToken();
+        } break;
+
+        case token_binary: {
+            getNextToken();
+            // binary 关键字后应该接一个运算符来定义这个运算符
+            if (!isascii(kCurToken)) {
+                return logErrorP("Expected binary operator");
+            }
+
+            functionName = "binary";
+            functionName += kCurToken;
+            kind = Binary;
+
+            getNextToken();
+            if (token_number == kCurToken) {
+                if (kNumberValue < 1 || kNumberValue > 100) {
+                    return logErrorP("Invalid precedence: must be 1..100");
+                }
+                binaryPrecedence = kNumberValue;
+                getNextToken();
+            }
+        } break;
+
+        default: {
+            return logErrorP("Expected Function name in prototype");
+        } break;
     }
 
-    std::string functionName = kIdentifierString;
-    getNextToken();
-
+    // 不管是什么函数定义，函数名后边都是 (arg1 arg2) 的形式，这里记录个个参数名
     if (kCurToken != '(') {
         return logErrorP("Expected '(' in prototype");
     }
-
     std::vector<std::string> argNames;
     while (getNextToken() == token_identifier) {
         argNames.push_back(kIdentifierString);
@@ -436,10 +535,15 @@ static std::unique_ptr<PrototypeAST> parsePrototype() {
         return logErrorP("Expected ')' in prototype");
     }
 
-    // 下次该解析 ')' 后边的东西了，这个 getNextToken 提前拿出 ‘)’
+    // 如果函数定义是运算符，那么它的参数必须是对应的一个或者两个
+    if (kind && argNames.size() != kind) {
+        return logErrorP("Invalid number of operands for operator");
+    }
+
+    // 准备给后续 parse 的下一个 token
     getNextToken();
 
-    return llvm::make_unique<PrototypeAST>(functionName, std::move(argNames));
+    return llvm::make_unique<PrototypeAST>(functionName, std::move(argNames), kind != Identifier, binaryPrecedence);
 }
 
 /*

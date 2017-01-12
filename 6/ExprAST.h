@@ -8,11 +8,16 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <map>
 
 namespace llvm {
     class Value;
     class Function;
 }
+
+
+/// 储存了各个操作符的优先级
+extern std::map<char, int> kBinaryOPPrecedence;
 
 
 /// 初始化 llvm 上下文，之后才可以生成 llvm IR 代码
@@ -64,6 +69,24 @@ private:
 
 public:
     VariableExprAST(const std::string &name);
+
+    virtual llvm::Value *codegen() override;
+};
+
+
+/**
+ * 一元运算符节点
+ * 比如 "!"
+ */
+class UnaryExprAST : public ExprAST {
+private:
+    /// 自定义的运算符的字符
+    char m_operatorCode;
+    /// 自定义的运算符的运算对象
+    std::unique_ptr<ExprAST> m_operand;
+
+public:
+    UnaryExprAST(char operatorCode, std::unique_ptr<ExprAST> operand);
 
     virtual llvm::Value *codegen() override;
 };
@@ -163,6 +186,8 @@ public:
 
     /// 返回函数名
     std::string getName();
+    /// 取的运算符的 ascii 码
+    char getOperatorName();
     /// 返回函数是否是一元运算符
     bool isUnaryOperator();
     /// 返回函数是否是二元运算符

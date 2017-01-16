@@ -18,8 +18,8 @@ static llvm::LLVMContext kTheContext;
 static llvm::IRBuilder<> kBuilder(kTheContext);
 /// 当前模块，当前所有函数都在同一模块中
 static std::unique_ptr<llvm::Module> kTheModule;
-/// 保存变量名与 llvm IR 对象的对应关系
-static std::map<std::string, llvm::Value *> kNamedValue;
+/// 保存变量名与 llvm IR 对象的对应关系，为了实现改变变量，我们修改为保存变量名与变量地址的对应关系
+static std::map<std::string, llvm::AllocaInst *> kNamedValue;
 
 
 void initLLVMContext() {
@@ -28,6 +28,18 @@ void initLLVMContext() {
 
 void dumpLLVMContext() {
     kTheModule->dump();
+}
+
+
+/**
+ * 在函数作用域的栈中创建变量
+ * 这里的函数含义比较广，不如一个循环结构，一个分支结构等，都可以有自己独立的栈
+ * 最直接的体现就是这些作用域里边的变量是会覆盖外边的变量的
+ */
+static llvm::AllocaInst *createEntryBlockAlloca(llvm::Function *function, const std::string &varName) {
+    llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+
+    return tmpBuilder.CreateAlloca(llvm::Type::getDoubleTy(kTheContext), 0, varName.c_str());
 }
 
 
@@ -60,12 +72,12 @@ VariableExprAST::VariableExprAST(const std::string &name)
 }
 
 llvm::Value* VariableExprAST::codegen() {
-    llvm::Value *v = kNamedValue[m_name];
-    if (!v) {
-        logErrorV("Unknown variable name");
+    llvm::Value *value = kNamedValue[m_name];
+    if (!value) {
+        return logErrorV("Unknown variable name");
     }
 
-    return v;
+    return kBuilder.CreateLoad(value, m_name.c_str());
 }
 
 
@@ -278,6 +290,20 @@ unsigned PrototypeAST::getBinaryPrecedence() {
     return m_precedence;
 }
 
+void PrototypeAST::createArgumentAllocas(llvm::Function *function) {
+    llvm::Function::arg_iterator allocaIterator = function->arg_begin();
+    for (int index = 0; index < m_args.size(); ++index, ++allocaIterator) {
+        // 在函数作用域的栈中创建变量
+        llvm::AllocaInst *alloca = createEntryBlockAlloca(function, m_args[index]);
+
+        // 将参数值传给变量
+        kBuilder.CreateStore(allocaIterator, alloca);
+
+        // 记录一下以便后边访问和更改
+        kNamedValue[m_args[index]] = alloca;
+    }
+}
+
 llvm::Function* PrototypeAST::codegen() {
     std::vector<llvm::Type *> doubles(m_args.size(), llvm::Type::getDoubleTy(kTheContext));
     llvm::FunctionType *functionType = llvm::FunctionType::get(llvm::Type::getDoubleTy(kTheContext), doubles,
@@ -355,14 +381,19 @@ ForExprAST::ForExprAST(const std::string &varName, std::unique_ptr<ExprAST> star
 }
 
 llvm::Value* ForExprAST::codegen() {
+    // 当前函数
+    llvm::Function *function = kBuilder.GetInsertBlock()->getParent();
+    // 循环的变量
+    llvm::AllocaInst *alloca = createEntryBlockAlloca(function, m_varName);
+
     llvm::Value *startValue = m_start->codegen();
     if (nullptr == startValue) {
         return nullptr;
     }
 
-    // 在当前函数后边加上我们将要生成的 for 循环 block
-    llvm::Function *function = kBuilder.GetInsertBlock()->getParent();
-    llvm::BasicBlock *preheaderBlock = kBuilder.GetInsertBlock();
+    // 存储循环变量的值
+    kBuilder.CreateStore(startValue, alloca);
+
     llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(kTheContext, "loop", function);
 
     // 当前函数插入点上，插入运行当前分支语句的代码
@@ -370,14 +401,9 @@ llvm::Value* ForExprAST::codegen() {
     // 开始往循环中插入代码
     kBuilder.SetInsertPoint(loopBlock);
 
-    // 分支进入与否同样涉及 SSA (静态单赋值) 问题，所以这里用 phi node 确定进入与不进入循环不同的两个路径
-    // 这里添加的是不进入循环的走法
-    llvm::PHINode *variable = kBuilder.CreatePHI(llvm::Type::getDoubleTy(kTheContext), 2, m_varName.c_str());
-    variable->addIncoming(startValue, preheaderBlock);
-
     // 如果在循环中循环变量覆盖了当前作用域的变量，我们需要在循环结束后恢复那个变量，所以现在先记住它旧的值
-    llvm::Value *oldValue = kNamedValue[m_varName];
-    kNamedValue[m_varName] = variable;
+    llvm::AllocaInst *oldValue = kNamedValue[m_varName];
+    kNamedValue[m_varName] = alloca;
 
     if (nullptr == m_body->codegen()) {
         return nullptr;
@@ -395,14 +421,17 @@ llvm::Value* ForExprAST::codegen() {
         stepValue = llvm::ConstantFP::get(kTheContext, llvm::APFloat(1.0));
     }
 
-    // 对循环变量执行步进
-    llvm::Value *nextValue = kBuilder.CreateFAdd(variable, stepValue, "nextvar");
-
     // 循环结束条件
     llvm::Value *endCondition = m_end->codegen();
     if (nullptr == endCondition) {
         return nullptr;
     }
+
+    // 将循环变量的值设置为最新的
+    // 重新读取一下循环变量的值，因为 body 中可能改变了循环变量的值
+    llvm::Value *curValue = kBuilder.CreateLoad(alloca);
+    llvm::Value *nextValue = kBuilder.CreateFAdd(curValue, stepValue, "nextVar");
+    kBuilder.CreateStore(nextValue, alloca);
 
     // 循环结束条件与 true(1.0) 判断
     endCondition = kBuilder.CreateFCmpONE(endCondition, llvm::ConstantFP::get(kTheContext, llvm::APFloat(1.0)),
@@ -416,9 +445,6 @@ llvm::Value* ForExprAST::codegen() {
 
     // 将后边的代码添加地点放到循环结束后
     kBuilder.SetInsertPoint(afterBlock);
-
-    // 如果进入循环的话，最后会从 loopEndBlock 结束，这也是 phi node 的一个路径，用它完成 phi node
-    variable->addIncoming(nextValue, loopEndBlock);
 
     if (oldValue) {
         kNamedValue[m_varName] = oldValue;

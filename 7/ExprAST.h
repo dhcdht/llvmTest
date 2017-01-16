@@ -195,6 +195,9 @@ public:
     /// 返回二元运算符的优先级
     unsigned getBinaryPrecedence();
 
+    /// 创建各个参数，并且记录地址到 kNamedValue，以便后边的访问和更改
+    void createArgumentAllocas(llvm::Function *function);
+
     llvm::Function *codegen();
 };
 

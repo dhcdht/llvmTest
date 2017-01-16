@@ -439,29 +439,6 @@ static std::unique_ptr<ExprAST> parseExpression() {
  * @return
  */
 static std::unique_ptr<PrototypeAST> parsePrototype() {
-//    if (kCurToken != token_identifier) {
-//        return logErrorP("Expected function name in prototype");
-//    }
-//
-//    std::string functionName = kIdentifierString;
-//    getNextToken();
-//
-//    if (kCurToken != '(') {
-//        return logErrorP("Expected '(' in prototype");
-//    }
-//
-//    std::vector<std::string> argNames;
-//    while (getNextToken() == token_identifier) {
-//        argNames.push_back(kIdentifierString);
-//    }
-//    if (kCurToken != ')') {
-//        return logErrorP("Expected ')' in prototype");
-//    }
-//
-//    // 下次该解析 ')' 后边的东西了，这个 getNextToken 提前拿出 ‘)’
-//    getNextToken();
-//
-//    return llvm::make_unique<PrototypeAST>(functionName, std::move(argNames));
     // 记录函数名
     std::string functionName;
     // 函数类型定义

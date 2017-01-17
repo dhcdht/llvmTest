@@ -70,6 +70,8 @@ private:
 public:
     VariableExprAST(const std::string &name);
 
+    std::string getName();
+
     virtual llvm::Value *codegen() override;
 };
 
@@ -165,6 +167,22 @@ public:
 };
 
 
+/**
+ * 变量定义节点
+ * var a = 1.0 in ...
+ */
+class VarExprAST : public ExprAST {
+private:
+    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> m_varNames;
+    std::unique_ptr<ExprAST> m_body;
+
+public:
+    VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> varNames, std::unique_ptr<ExprAST> body);
+
+    virtual llvm::Value *codegen() override;
+};
+
+
 /*
 函数定义节点
 这不是一个表达式
@@ -195,8 +213,8 @@ public:
     /// 返回二元运算符的优先级
     unsigned getBinaryPrecedence();
 
-    /// 创建各个参数，并且记录地址到 kNamedValue，以便后边的访问和更改
-    void createArgumentAllocas(llvm::Function *function);
+//    /// 创建各个参数，并且记录地址到 kNamedValue，以便后边的访问和更改
+//    void createArgumentAllocas(llvm::Function *function);
 
     llvm::Function *codegen();
 };

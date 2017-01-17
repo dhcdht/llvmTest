@@ -37,7 +37,7 @@ void dumpLLVMContext() {
  * 最直接的体现就是这些作用域里边的变量是会覆盖外边的变量的
  */
 static llvm::AllocaInst *createEntryBlockAlloca(llvm::Function *function, const std::string &varName) {
-    llvm::IRBuilder tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
+    llvm::IRBuilder<> tmpBuilder(&function->getEntryBlock(), function->getEntryBlock().begin());
 
     return tmpBuilder.CreateAlloca(llvm::Type::getDoubleTy(kTheContext), 0, varName.c_str());
 }
@@ -69,6 +69,10 @@ llvm::Value *NumberExprAST::codegen() {
 VariableExprAST::VariableExprAST(const std::string &name)
         : m_name(name) {
 
+}
+
+std::string VariableExprAST::getName() {
+    return m_name;
 }
 
 llvm::Value* VariableExprAST::codegen() {
@@ -113,6 +117,27 @@ llvm::Value* BinaryExprAST::codegen() {
     llvm::Value *rhsValue = m_rhs->codegen();
     if (!lhsValue || !rhsValue) {
         return nullptr;
+    }
+
+    // 赋值是一个特殊的二元运算符，因其左值是不需要计算的
+    if (m_op == '=') {
+        // 赋值的左值应该是一个变量，而不是需要计算的表达式
+        VariableExprAST *lhs = dynamic_cast<VariableExprAST *>(m_lhs.get());
+        if (!lhs) {
+            return logErrorV("Destination of '=' must be a variable");
+        }
+
+        // 获取左值的那个变量
+        llvm::Value *variable = kNamedValue[lhs->getName()];
+        if (!variable) {
+            return logErrorV("Unknown variable name");
+        }
+
+        // 设置左值的变量为右值的计算结果
+        kBuilder.CreateStore(rhsValue, variable);
+
+        // 整体运算符的值是右值的结算结果
+        return rhsValue;
     }
 
     switch (m_op) {
@@ -264,6 +289,63 @@ llvm::Value *IfExprAST::codegen() {
 }
 
 
+VarExprAST::VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> varNames,
+                       std::unique_ptr<ExprAST> body)
+        : m_varNames(std::move(varNames)), m_body(std::move(body)) {
+
+}
+
+llvm::Value* VarExprAST::codegen() {
+    // 当前函数
+    llvm::Function *function = kBuilder.GetInsertBlock()->getParent();
+
+    // 用来记录被当前作用域覆盖的外层同名变量的值
+    std::vector<llvm::AllocaInst *> oldBindings;
+    for (int i = 0; i < m_varNames.size(); ++i) {
+        const std::string &varName = m_varNames[i].first;
+        ExprAST *init = m_varNames[i].second.get();
+
+        // 先插入右值代码，再在函数作用域中生成左值变量
+        // 比如 var a = a 这种情况，
+        // 不先执行右值计算，a 值会使用错误，并且再也无法访问外边的 a 值
+        llvm::Value *initValue;
+        if (init) {
+            initValue = init->codegen();
+            if (!initValue) {
+                return nullptr;
+            }
+        } else {
+            // 如果没有写右值，那么默认是 0.0
+            initValue = llvm::ConstantFP::get(kTheContext, llvm::APFloat(0.0));
+        }
+
+        // 生成变量
+        llvm::AllocaInst *alloca = createEntryBlockAlloca(function, varName);
+        // 赋初值
+        kBuilder.CreateStore(initValue, alloca);
+
+        // 记住被当前作用域覆盖的外层同名变量的值
+        oldBindings.push_back(kNamedValue[varName]);
+
+        // 记录在当前作用域中，varName 名字的变量的内存
+        kNamedValue[varName] = alloca;
+    }
+
+    // 现在，所有 m_body 用到的变量都有了，可以开始生成 m_body 的 IR 代码了
+    llvm::Value *bodyValue = m_body->codegen();
+    if (!bodyValue) {
+        return nullptr;
+    }
+
+    // 当前作用域结束之后，恢复旧的同名变量的各个值
+    for (int j = 0; j < m_varNames.size(); ++j) {
+        kNamedValue[m_varNames[j].first] = oldBindings[j];
+    }
+
+    return bodyValue;
+}
+
+
 PrototypeAST::PrototypeAST(const std::string &name, std::vector<std::string> args, bool isOperator,
                            unsigned int precedence)
         : m_name(name), m_args(std::move(args)), m_isOperator(isOperator), m_precedence(precedence) {
@@ -290,19 +372,19 @@ unsigned PrototypeAST::getBinaryPrecedence() {
     return m_precedence;
 }
 
-void PrototypeAST::createArgumentAllocas(llvm::Function *function) {
-    llvm::Function::arg_iterator allocaIterator = function->arg_begin();
-    for (int index = 0; index < m_args.size(); ++index, ++allocaIterator) {
-        // 在函数作用域的栈中创建变量
-        llvm::AllocaInst *alloca = createEntryBlockAlloca(function, m_args[index]);
-
-        // 将参数值传给变量
-        kBuilder.CreateStore(allocaIterator, alloca);
-
-        // 记录一下以便后边访问和更改
-        kNamedValue[m_args[index]] = alloca;
-    }
-}
+//void PrototypeAST::createArgumentAllocas(llvm::Function *function) {
+//    llvm::Function::arg_iterator allocaIterator = function->arg_begin();
+//    for (int index = 0; index < m_args.size(); ++index, ++allocaIterator) {
+//        // 在函数作用域的栈中创建变量
+//        llvm::AllocaInst *alloca = createEntryBlockAlloca(function, m_args[index]);
+//
+//        // 将参数值传给变量
+//        kBuilder.CreateStore(allocaIterator, alloca);
+//
+//        // 记录一下以便后边访问和更改
+//        kNamedValue[m_args[index]] = alloca;
+//    }
+//}
 
 llvm::Function* PrototypeAST::codegen() {
     std::vector<llvm::Type *> doubles(m_args.size(), llvm::Type::getDoubleTy(kTheContext));
@@ -350,7 +432,14 @@ llvm::Function* FunctionAST::codegen() {
     // 记录参数名与其对应的 llvm::Value 对象
     kNamedValue.clear();
     for (auto &arg : theFunction->args()) {
-        kNamedValue[arg.getName()] = &arg;
+        // 创建
+        llvm::AllocaInst *alloca = createEntryBlockAlloca(theFunction, arg.getName());
+
+        // 赋值
+        kBuilder.CreateStore(&arg, alloca);
+
+        // 记录
+        kNamedValue[arg.getName()] = alloca;
     }
 
     // 对于二元运算符，我们要存储它的优先级

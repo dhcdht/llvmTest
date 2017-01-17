@@ -28,6 +28,9 @@ enum Token {
     // 用户自定义运算符的关键字
     token_binary = -11, // 二元
     token_unary = -12,  // 一元
+
+    // 用户定义变量关键字
+    token_var = -13,
 };
 
 /// token 为 token_identifier 时，记下当前的 token 字符串
@@ -75,6 +78,8 @@ static int getToken() {
             return token_binary;
         } else if (kIdentifierString == "unary") {
             return token_unary;
+        } else if (kIdentifierString == "var") {
+            return token_var;
         }
 
         // 一个普通的字符串很可能是一个标识，比如变量名
@@ -321,6 +326,63 @@ static std::unique_ptr<ExprAST> parseForExpr() {
     return llvm::make_unique<ForExprAST>(idName, std::move(start), std::move(end), std::move(step), std::move(body));
 }
 
+/**
+ * 解析 var a = 1.0 in ... 写法
+ */
+static std::unique_ptr<ExprAST> parseVarExpr() {
+
+    std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> varNames;
+
+    getNextToken();
+    if (kCurToken != token_identifier) {
+        return logError("Expected identifier after var");
+    }
+
+    while (1) {
+        // 变量名
+        std::string name = kIdentifierString;
+        // 记录右值表达式
+        std::unique_ptr<ExprAST> init;
+
+        getNextToken();
+        if (kCurToken == '=') {
+
+            getNextToken();
+            init = parseExpression();
+            if (!init) {
+                return nullptr;
+            }
+        }
+
+        varNames.push_back(std::make_pair(name, std::move(init)));
+
+        // var 用 ',' 来同时定义多个变量，如果找不到 ','，那么循环就可以结束了
+        if (kCurToken != ',') {
+            break;
+        }
+
+        // 如果是 ',' 分割的多个变量定义，那么下一个 token 还应该是 token_identifier，一个变量名才对
+        getNextToken();
+        if (kCurToken != token_identifier) {
+            return logError("Expected identifier list after var");
+        }
+    }
+
+    // 后边跟着的应该是 in 关键字
+    if (kCurToken != token_in) {
+        return logError("Expected 'in' keywork after 'var'");
+    }
+
+    // 解析主体表达式
+    getNextToken();
+    auto body = parseExpression();
+    if (!body) {
+        return nullptr;
+    }
+
+    return llvm::make_unique<VarExprAST>(std::move(varNames), std::move(body));
+}
+
 /*
 解析 token 的主函数
 */
@@ -344,6 +406,10 @@ static std::unique_ptr<ExprAST> parsePrimary() {
 
         case token_for: {
             return parseForExpr();
+        } break;
+
+        case token_var: {
+            return parseVarExpr();
         } break;
 
         default: {
@@ -645,6 +711,7 @@ int main(int argc, char const *argv[]) {
 
     // 规定各个操作符的优先级
     {
+        kBinaryOPPrecedence['='] = 2;
         kBinaryOPPrecedence['<'] = 10;
         kBinaryOPPrecedence['+'] = 20;
         kBinaryOPPrecedence['-'] = 30;

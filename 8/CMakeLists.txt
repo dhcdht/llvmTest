@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.6)
 
+project(llvmTest8)
+
 set(CMAKE_CXX_STANDARD 11)
 
 find_package(LLVM REQUIRED CONFIG)
@@ -9,9 +11,9 @@ find_package(LLVM REQUIRED CONFIG)
 llvm_map_components_to_libnames(llvm_libs core)
 link_libraries(${llvm_libs})
 
-add_subdirectory(3)
-add_subdirectory(4)
-add_subdirectory(5)
-add_subdirectory(6)
-add_subdirectory(7)
-add_subdirectory(8)
+set(SOURCE_FILES
+        toy.cpp
+        ExprAST.cpp
+        ExprAST.h)
+
+add_executable(llvmTest8 ${SOURCE_FILES})

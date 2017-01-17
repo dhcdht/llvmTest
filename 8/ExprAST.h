@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <llvm/IR/Module.h>
 
 namespace llvm {
     class Value;
@@ -23,7 +24,7 @@ extern std::map<char, int> kBinaryOPPrecedence;
 /// 初始化 llvm 上下文，之后才可以生成 llvm IR 代码
 extern void initLLVMContext();
 /// dump 出 llvm IR 中现在的代码
-extern void dumpLLVMContext();
+extern llvm::Module* dumpLLVMContext();
 
 
 /*

@@ -26,8 +26,10 @@ void initLLVMContext() {
     kTheModule = llvm::make_unique<llvm::Module>("My custom jit", kTheContext);
 }
 
-void dumpLLVMContext() {
+llvm::Module* dumpLLVMContext() {
     kTheModule->dump();
+
+    return kTheModule.get();
 }
 
 

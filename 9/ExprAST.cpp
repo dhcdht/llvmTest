@@ -76,6 +76,10 @@ static int advance() {
     return lastChar;
 }
 
+llvm::raw_ostream &indent(llvm::raw_ostream &out, int size) {
+    return out << std::string(size, ' ');
+}
+
 
 static llvm::DISubroutineType *createFunctionType(unsigned numberArgs, llvm::DIFile *unit) {
     llvm::SmallVector<llvm::Metadata *, 8> eltTypes;
@@ -152,6 +156,10 @@ llvm::Value *NumberExprAST::codegen() {
     return llvm::ConstantFP::get(kTheContext, llvm::APFloat(m_val));
 }
 
+llvm::raw_ostream& NumberExprAST::dump(llvm::raw_ostream &out, int index) {
+    return ExprAST::dump(out << m_val, index);
+}
+
 
 VariableExprAST::VariableExprAST(const std::string &name)
         : m_name(name) {
@@ -169,6 +177,10 @@ llvm::Value* VariableExprAST::codegen() {
     }
 
     return kBuilder.CreateLoad(value, m_name.c_str());
+}
+
+llvm::raw_ostream& VariableExprAST::dump(llvm::raw_ostream &out, int index) {
+    return ExprAST::dump(out << m_name, index);
 }
 
 
@@ -191,6 +203,13 @@ llvm::Value* UnaryExprAST::codegen() {
     }
 
     return kBuilder.CreateCall(function, operandValue, "unop");
+}
+
+llvm::raw_ostream& UnaryExprAST::dump(llvm::raw_ostream &out, int index) {
+    ExprAST::dump(out << "unary" << m_operatorCode, index);
+    m_operand->dump(out, index + 1);
+
+    return out;
 }
 
 
@@ -273,6 +292,14 @@ llvm::Value* BinaryExprAST::codegen() {
     }
 }
 
+llvm::raw_ostream& BinaryExprAST::dump(llvm::raw_ostream &out, int index) {
+    ExprAST::dump(out << "binary" << m_op, index);
+    m_lhs->dump(indent(out, index) << "lhs:", index + 1);
+    m_rhs->dump(indent(out, index) << "rhs:", index + 1);
+
+    return out;
+}
+
 
 CallExprAST::CallExprAST(const std::string &callee, std::vector<std::unique_ptr<ExprAST>> args)
         : m_callee(callee), m_args(std::move(args)) {
@@ -302,6 +329,16 @@ llvm::Value* CallExprAST::codegen() {
     // 创建函数调用的 llvm IR 代码
     return kBuilder.CreateCall(calleeFunc, argsValue, "calltmp");
 }
+
+llvm::raw_ostream& CallExprAST::dump(llvm::raw_ostream &out, int index) {
+    ExprAST::dump(out << "call " << m_callee, index);
+    for (const auto &arg : m_args) {
+        arg->dump(indent(out, index + 1), index + 1);
+    }
+
+    return out;
+}
+
 
 IfExprAST::IfExprAST(std::unique_ptr<ExprAST> condition, std::unique_ptr<ExprAST> then,
                      std::unique_ptr<ExprAST> elseExpr)
@@ -375,6 +412,15 @@ llvm::Value *IfExprAST::codegen() {
     return phiNode;
 }
 
+llvm::raw_ostream& IfExprAST::dump(llvm::raw_ostream &out, int index) {
+    ExprAST::dump(out << "if", index);
+    m_condition->dump(indent(out, index) << "condition:", index + 1);
+    m_then->dump(indent(out, index) << "then:", index + 1);
+    m_else->dump(indent(out, index) << "else:", index + 1);
+
+    return out;
+}
+
 
 VarExprAST::VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> varNames,
                        std::unique_ptr<ExprAST> body)
@@ -430,6 +476,16 @@ llvm::Value* VarExprAST::codegen() {
     }
 
     return bodyValue;
+}
+
+llvm::raw_ostream& VarExprAST::dump(llvm::raw_ostream &out, int index) {
+    ExprAST::dump(out << "var", index);
+    for (const auto &varName : m_varNames) {
+        varName.second->dump(indent(out, index) << varName.first << ':', index + 1);
+    }
+    m_body->dump(indent(out, index) << "body:", index + 1);
+
+    return out;
 }
 
 
@@ -557,6 +613,14 @@ llvm::Function* FunctionAST::codegen() {
     return nullptr;
 }
 
+llvm::raw_ostream& FunctionAST::dump(llvm::raw_ostream &out, int index) {
+    indent(out, index) << "FunctionAST\n";
+    ++index;
+    indent(out, index) << "body:";
+
+    return m_body ? m_body->dump(out, index) : out << "null\n";
+}
+
 
 ForExprAST::ForExprAST(const std::string &varName, std::unique_ptr<ExprAST> start, std::unique_ptr<ExprAST> end,
                        std::unique_ptr<ExprAST> step, std::unique_ptr<ExprAST> body)
@@ -638,4 +702,14 @@ llvm::Value* ForExprAST::codegen() {
 
     // for 循环作为表达式，整体对外的值永远是 0.0
     return llvm::Constant::getNullValue(llvm::Type::getDoubleTy(kTheContext));
+}
+
+llvm::raw_ostream& ForExprAST::dump(llvm::raw_ostream &out, int index) {
+    ExprAST::dump(out << "for", index);
+    m_start->dump(indent(out, index) << "condition:", index + 1);
+    m_end->dump(indent(out, index) << "end:", index + 1);
+    m_step->dump(indent(out, index) << "step:", index + 1);
+    m_body->dump(indent(out, index) << "body:", index + 1);
+
+    return out;
 }

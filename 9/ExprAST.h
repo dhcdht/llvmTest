@@ -47,7 +47,7 @@ public:
 
     int getLine();
     int getCol();
-    virtual llvm::raw_ostream& dump(llvm::raw_ostream &out, int index);
+    virtual llvm::raw_ostream &dump(llvm::raw_ostream &out, int index);
 
     /*
     生成并取得 AST 节点对应的 llvm::Value 对象
@@ -68,7 +68,9 @@ private:
 public:
     NumberExprAST(double val);
 
-    virtual llvm::Value *codegen() override;
+    llvm::raw_ostream &dump(llvm::raw_ostream &out, int index) override;
+
+    llvm::Value *codegen() override;
 };
 
 
@@ -86,7 +88,9 @@ public:
 
     std::string getName();
 
-    virtual llvm::Value *codegen() override;
+    llvm::raw_ostream &dump(llvm::raw_ostream &out, int index) override;
+
+    llvm::Value *codegen() override;
 };
 
 
@@ -104,7 +108,9 @@ private:
 public:
     UnaryExprAST(char operatorCode, std::unique_ptr<ExprAST> operand);
 
-    virtual llvm::Value *codegen() override;
+    llvm::raw_ostream &dump(llvm::raw_ostream &out, int index) override;
+
+    llvm::Value *codegen() override;
 };
 
 
@@ -122,7 +128,9 @@ private:
 public:
     BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs);
 
-    virtual llvm::Value *codegen() override;
+    llvm::raw_ostream &dump(llvm::raw_ostream &out, int index) override;
+
+    llvm::Value *codegen() override;
 };
 
 
@@ -140,7 +148,9 @@ private:
 public:
     CallExprAST(const std::string &callee, std::vector<std::unique_ptr<ExprAST>> args);
 
-    virtual llvm::Value *codegen() override;
+    llvm::raw_ostream &dump(llvm::raw_ostream &out, int index) override;
+
+    llvm::Value *codegen() override;
 };
 
 
@@ -157,7 +167,9 @@ private:
 public:
     IfExprAST(std::unique_ptr<ExprAST> condition, std::unique_ptr<ExprAST> then, std::unique_ptr<ExprAST> elseExpr);
 
-    virtual llvm::Value *codegen() override;
+    llvm::raw_ostream &dump(llvm::raw_ostream &out, int index) override;
+
+    llvm::Value *codegen() override;
 };
 
 
@@ -177,7 +189,9 @@ public:
     ForExprAST(const std::string &varName, std::unique_ptr<ExprAST> start, std::unique_ptr<ExprAST> end,
                std::unique_ptr<ExprAST> step, std::unique_ptr<ExprAST> body);
 
-    virtual llvm::Value *codegen() override;
+    llvm::raw_ostream &dump(llvm::raw_ostream &out, int index) override;
+
+    llvm::Value *codegen() override;
 };
 
 
@@ -193,7 +207,9 @@ private:
 public:
     VarExprAST(std::vector<std::pair<std::string, std::unique_ptr<ExprAST>>> varNames, std::unique_ptr<ExprAST> body);
 
-    virtual llvm::Value *codegen() override;
+    llvm::raw_ostream &dump(llvm::raw_ostream &out, int index) override;
+
+    llvm::Value *codegen() override;
 };
 
 
@@ -248,6 +264,8 @@ private:
 
 public:
     FunctionAST(std::unique_ptr<PrototypeAST> prototype, std::unique_ptr<ExprAST> body);
+
+    llvm::raw_ostream &dump(llvm::raw_ostream &out, int index);
 
     llvm::Function *codegen();
 };

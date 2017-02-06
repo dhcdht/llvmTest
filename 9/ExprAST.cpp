@@ -2,6 +2,7 @@
 // Created by 董宏昌 on 2017/1/8.
 //
 
+#include <MacTypes.h>
 #include "ExprAST.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/IRBuilder.h"
@@ -134,11 +135,11 @@ ExprAST::~ExprAST() {
 
 }
 
-int ExprAST::getLine() {
+unsigned ExprAST::getLine() {
     return m_sourceLocation.line;
 }
 
-int ExprAST::getCol() {
+unsigned ExprAST::getCol() {
     return m_sourceLocation.col;
 }
 
@@ -153,6 +154,8 @@ NumberExprAST::NumberExprAST(double val)
 }
 
 llvm::Value *NumberExprAST::codegen() {
+    // 记录调试信息
+    kDebugInfo.emitLocation(this);
     return llvm::ConstantFP::get(kTheContext, llvm::APFloat(m_val));
 }
 
@@ -175,6 +178,9 @@ llvm::Value* VariableExprAST::codegen() {
     if (!value) {
         return logErrorV("Unknown variable name");
     }
+
+    // 记录调试信息
+    kDebugInfo.emitLocation(this);
 
     return kBuilder.CreateLoad(value, m_name.c_str());
 }
@@ -202,6 +208,9 @@ llvm::Value* UnaryExprAST::codegen() {
         return logErrorV("Unknown unary operator");
     }
 
+    // 记录调试信息
+    kDebugInfo.emitLocation(this);
+
     return kBuilder.CreateCall(function, operandValue, "unop");
 }
 
@@ -219,6 +228,9 @@ BinaryExprAST::BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_
 }
 
 llvm::Value* BinaryExprAST::codegen() {
+    // 记录调试信息
+    kDebugInfo.emitLocation(this);
+
     llvm::Value *lhsValue = m_lhs->codegen();
     llvm::Value *rhsValue = m_rhs->codegen();
     if (!lhsValue || !rhsValue) {
@@ -307,6 +319,9 @@ CallExprAST::CallExprAST(const std::string &callee, std::vector<std::unique_ptr<
 }
 
 llvm::Value* CallExprAST::codegen() {
+    // 记录调试信息
+    kDebugInfo.emitLocation(this);
+
     // 取的要调用的函数
     llvm::Function *calleeFunc = kTheModule->getFunction(m_callee);
     if (!calleeFunc) {
@@ -355,6 +370,9 @@ IfExprAST::IfExprAST(std::unique_ptr<ExprAST> condition, std::unique_ptr<ExprAST
  * 这样，就需要 ifcont 来根据上一步运行的是 then 还是 else 来分别处理后续的赋值步骤
  */
 llvm::Value *IfExprAST::codegen() {
+    // 记录调试信息
+    kDebugInfo.emitLocation(this);
+
     llvm::Value *conditionValue = m_condition->codegen();
     if (!conditionValue) {
         return nullptr;
@@ -463,6 +481,9 @@ llvm::Value* VarExprAST::codegen() {
         // 记录在当前作用域中，varName 名字的变量的内存
         kNamedValue[varName] = alloca;
     }
+
+    // 记录调试信息
+    kDebugInfo.emitLocation(this);
 
     // 现在，所有 m_body 用到的变量都有了，可以开始生成 m_body 的 IR 代码了
     llvm::Value *bodyValue = m_body->codegen();
@@ -633,6 +654,9 @@ llvm::Value* ForExprAST::codegen() {
     llvm::Function *function = kBuilder.GetInsertBlock()->getParent();
     // 循环的变量
     llvm::AllocaInst *alloca = createEntryBlockAlloca(function, m_varName);
+
+    // 记录调试信息
+    kDebugInfo.emitLocation(this);
 
     llvm::Value *startValue = m_start->codegen();
     if (nullptr == startValue) {

@@ -28,8 +28,8 @@ extern llvm::Module* dumpLLVMContext();
 
 
 struct SourceLocation {
-    int line;
-    int col;
+    unsigned line;
+    unsigned col;
 };
 
 
@@ -45,8 +45,8 @@ protected:
 public:
     virtual ~ExprAST();
 
-    int getLine();
-    int getCol();
+    unsigned getLine();
+    unsigned getCol();
     virtual llvm::raw_ostream &dump(llvm::raw_ostream &out, int index);
 
     /*

@@ -8,8 +8,10 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/IR/DIBuilder.h"
 
 
+/// 运算符优先级记录
 std::map<char, int> kBinaryOPPrecedence;
 
 /// llvm 当前上下文对象
@@ -20,10 +22,81 @@ static llvm::IRBuilder<> kBuilder(kTheContext);
 static std::unique_ptr<llvm::Module> kTheModule;
 /// 保存变量名与 llvm IR 对象的对应关系，为了实现改变变量，我们修改为保存变量名与变量地址的对应关系
 static std::map<std::string, llvm::AllocaInst *> kNamedValue;
+/// 用来生成调试信息
+static std::unique_ptr<llvm::DIBuilder> kDebugBuilder;
+
+
+struct DebugInfo {
+    llvm::DICompileUnit *compileUnit;
+    llvm::DIType *debugInfoType;
+    std::vector<llvm::DIScope *> lexicalBlocks;
+
+    void emitLocation(ExprAST *ast);
+    llvm::DIType *getDoubleTy();
+} kDebugInfo;
+
+void DebugInfo::emitLocation(ExprAST *ast) {
+    if (!ast) {
+        kBuilder.SetCurrentDebugLocation(llvm::DebugLoc());
+        return;
+    }
+
+    llvm::DIScope *scope;
+    if (this->lexicalBlocks.empty()) {
+        scope = this->compileUnit;
+    } else {
+        scope = this->lexicalBlocks.back();
+    }
+
+    kBuilder.SetCurrentDebugLocation(llvm::DebugLoc::get(ast->getLine(), ast->getCol(), scope));
+}
+
+llvm::DIType* DebugInfo::getDoubleTy() {
+    if (!this->debugInfoType) {
+        this->debugInfoType = kDebugBuilder->createBasicType("double", 64, 64, llvm::dwarf::DW_ATE_float);
+    }
+
+    return this->debugInfoType;
+}
+
+
+static SourceLocation kCurLocation;
+static SourceLocation kLexlocation = {1, 0};
+
+static int advance() {
+    int lastChar = getchar();
+
+    if (lastChar == '\n' || lastChar == '\r') {
+        kLexlocation.line++;
+        kLexlocation.col = 0;
+    } else {
+        kLexlocation.col++;
+    }
+
+    return lastChar;
+}
+
+
+static llvm::DISubroutineType *createFunctionType(unsigned numberArgs, llvm::DIFile *unit) {
+    llvm::SmallVector<llvm::Metadata *, 8> eltTypes;
+    llvm::DIType *Dbltype = kDebugInfo.getDoubleTy();
+
+    eltTypes.push_back(Dbltype);
+
+    for (int i = 0; i < numberArgs; ++i) {
+        eltTypes.push_back(Dbltype);
+    }
+
+    llvm::ArrayRef<llvm::Metadata *> array(eltTypes);
+
+    return kDebugBuilder->createSubroutineType(kDebugBuilder->getOrCreateTypeArray(array));
+}
 
 
 void initLLVMContext() {
     kTheModule = llvm::make_unique<llvm::Module>("My custom jit", kTheContext);
+
+    kDebugBuilder = llvm::make_unique<llvm::DIBuilder>(*kTheModule);
 }
 
 llvm::Module* dumpLLVMContext() {
@@ -55,6 +128,18 @@ llvm::Value *logErrorV(const char *str) {
 
 ExprAST::~ExprAST() {
 
+}
+
+int ExprAST::getLine() {
+    return m_sourceLocation.line;
+}
+
+int ExprAST::getCol() {
+    return m_sourceLocation.col;
+}
+
+llvm::raw_ostream& ExprAST::dump(llvm::raw_ostream &out, int index) {
+    return out << ':' << this->getLine() << ':' << this->getCol() << '\n';
 }
 
 
@@ -430,6 +515,14 @@ llvm::Function* FunctionAST::codegen() {
     // 创建函数实现
     llvm::BasicBlock *basicBlock = llvm::BasicBlock::Create(kTheContext, "entry", theFunction);
     kBuilder.SetInsertPoint(basicBlock);
+
+    // 为函数创建单独的调试信息记录
+    llvm::DIFile *debugUnit = kDebugBuilder->createFile(kDebugInfo.compileUnit->getFilename(),
+                                                        kDebugInfo.compileUnit->getDirectory());
+    llvm::DIScope *functionContext = debugUnit;
+//    unsigned lineNumber = m_prototype->get // todo
+//    llvm::DISubprogram *subprogram = kDebugBuilder->createFunction(functionContext, m_prototype->getName(), llvm::StringRef(), debugUnit, lineNumber, llvm::createfunc)
+
 
     // 记录参数名与其对应的 llvm::Value 对象
     kNamedValue.clear();

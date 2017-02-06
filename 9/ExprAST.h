@@ -27,14 +27,27 @@ extern void initLLVMContext();
 extern llvm::Module* dumpLLVMContext();
 
 
+struct SourceLocation {
+    int line;
+    int col;
+};
+
+
 /*
 AST : abstract syntax tree 抽象语法树
 ExprAST : 表达式的抽象语法树
 所有表达式节点的基类
 */
 class ExprAST {
+protected:
+    SourceLocation m_sourceLocation;
+
 public:
     virtual ~ExprAST();
+
+    int getLine();
+    int getCol();
+    virtual llvm::raw_ostream& dump(llvm::raw_ostream &out, int index);
 
     /*
     生成并取得 AST 节点对应的 llvm::Value 对象

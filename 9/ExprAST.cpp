@@ -102,10 +102,14 @@ void initLLVMContext() {
     kTheModule = llvm::make_unique<llvm::Module>("My custom jit", kTheContext);
 
     kDebugBuilder = llvm::make_unique<llvm::DIBuilder>(*kTheModule);
+    kDebugInfo.compileUnit = kDebugBuilder->createCompileUnit(llvm::dwarf::DW_LANG_C, "fib.ks", ".",
+                                                              "Kaleidoscope Compiler", false, "", 0);
 }
 
 llvm::Module* dumpLLVMContext() {
     kTheModule->dump();
+
+    kDebugBuilder->finalize();
 
     return kTheModule.get();
 }
@@ -567,6 +571,10 @@ llvm::Function* PrototypeAST::codegen() {
     return function;
 }
 
+unsigned PrototypeAST::getLine() {
+    return m_line;
+}
+
 
 FunctionAST::FunctionAST(std::unique_ptr<PrototypeAST> prototype, std::unique_ptr<ExprAST> body)
         : m_prototype(std::move(prototype)), m_body(std::move(body)) {
@@ -597,8 +605,16 @@ llvm::Function* FunctionAST::codegen() {
     llvm::DIFile *debugUnit = kDebugBuilder->createFile(kDebugInfo.compileUnit->getFilename(),
                                                         kDebugInfo.compileUnit->getDirectory());
     llvm::DIScope *functionContext = debugUnit;
-//    unsigned lineNumber = m_prototype->get // todo
-//    llvm::DISubprogram *subprogram = kDebugBuilder->createFunction(functionContext, m_prototype->getName(), llvm::StringRef(), debugUnit, lineNumber, llvm::createfunc)
+    unsigned lineNumber = m_prototype->getLine();
+    unsigned scopeLine = lineNumber;
+    llvm::DISubprogram *subprogram = kDebugBuilder->createFunction(
+            functionContext, m_prototype->getName(), llvm::StringRef(), debugUnit, lineNumber,
+            createFunctionType(theFunction->arg_size(), debugUnit),
+            false, true, scopeLine,
+            llvm::DINode::FlagPrototyped, false);
+    theFunction->setSubprogram(subprogram);
+    kDebugInfo.lexicalBlocks.push_back(subprogram);
+    kDebugInfo.emitLocation(nullptr);
 
 
     // 记录参数名与其对应的 llvm::Value 对象
@@ -613,6 +629,8 @@ llvm::Function* FunctionAST::codegen() {
         // 记录
         kNamedValue[arg.getName()] = alloca;
     }
+
+    kDebugInfo.emitLocation(m_body.get());
 
     // 对于二元运算符，我们要存储它的优先级
     if (m_prototype->isBinaryOperator()) {

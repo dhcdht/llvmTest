@@ -228,6 +228,7 @@ private:
     bool m_isOperator;
     /// 针对二元运算符的优先级
     unsigned m_precedence;
+    unsigned m_line;
 
 public:
     PrototypeAST(const std::string &name, std::vector<std::string> args, bool isOperator = false, unsigned precedence = 0);
@@ -242,6 +243,7 @@ public:
     bool isBinaryOperator();
     /// 返回二元运算符的优先级
     unsigned getBinaryPrecedence();
+    unsigned getLine();
 
 //    /// 创建各个参数，并且记录地址到 kNamedValue，以便后边的访问和更改
 //    void createArgumentAllocas(llvm::Function *function);

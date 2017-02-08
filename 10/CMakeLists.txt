@@ -16,6 +16,6 @@ link_libraries(${llvm_libs})
 set(SOURCE_FILES
         toy.cpp
         ExprAST.cpp
-        ExprAST.h)
+        ExprAST.h ExprParser.cpp ExprParser.h)
 
 add_executable(llvmTest10 ${SOURCE_FILES})

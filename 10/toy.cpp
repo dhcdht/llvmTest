@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <iostream>
+#include <sstream>
 #include "ExprAST.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/Function.h"
@@ -11,6 +13,7 @@
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Support/TargetSelect.h"
+#include "ExprParser.h"
 
 
 /// 解析的 token 类型枚举，这里都是负数，token 如果不是这里的类型，会返回 0-255 返回的 ascii 码
@@ -727,6 +730,13 @@ int main(int argc, char const *argv[]) {
         kBinaryOPPrecedence['-'] = 30;
         kBinaryOPPrecedence['*'] = 40;
     }
+
+    // todo
+//    std::string inputString;
+//    std::cout << "please input";
+//    std::getline(std::cin, inputString);
+//    auto parser = ExprParser();
+//    parser.startParse(inputString);
 
     // 初始化 llvm 环境
     initLLVMContext();

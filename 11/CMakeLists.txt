@@ -1,20 +1,21 @@
 cmake_minimum_required(VERSION 3.6)
 
+project(llvmTest11)
+
 set(CMAKE_CXX_STANDARD 11)
 
 find_package(LLVM REQUIRED CONFIG)
 #add_definitions(${LLVM_DEFINITIONS})
 #include_directories(${LLVM_INCLUDE_DIRS})
 #link_directories(${LLVM_LIBRARY_DIRS})
-llvm_map_components_to_libnames(llvm_libs core)
+llvm_map_components_to_libnames(llvm_libs
+        core
+        nativecodegen)
 link_libraries(${llvm_libs})
 
-add_subdirectory(3)
-add_subdirectory(4)
-add_subdirectory(5)
-add_subdirectory(6)
-add_subdirectory(7)
-add_subdirectory(8)
-add_subdirectory(9)
-add_subdirectory(10)
-add_subdirectory(11)
+set(SOURCE_FILES
+        toy.cpp
+        ExprAST.cpp
+        ExprAST.h ExprParser.cpp ExprParser.h)
+
+add_executable(llvmTest11 ${SOURCE_FILES})

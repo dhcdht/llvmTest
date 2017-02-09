@@ -87,11 +87,31 @@ private:
      * 解析 var a = 1.0 in ... 写法
      */
     std::unique_ptr<ExprAST> parseVarExpr();
-
     /*
-     * 解析 token 的主函数
+     * 能解析大部分表达式 token 的主函数
      */
     std::unique_ptr<ExprAST> parsePrimary();
+    /*
+     * 解析 func(a, b, c) 这种写法，即函数定义
+     * 解析二元运算符的函数定义
+     */
+    std::unique_ptr<PrototypeAST> parsePrototype();
+    /*
+     * 解析 def func(a, b) 这种写法，即函数实现
+     */
+    std::unique_ptr<FunctionAST> parseDefinition();
+    /*
+     * 解析 extern func 这种写法，即提前声明的函数定义
+     */
+    std::unique_ptr<PrototypeAST> parseExtern();
+    /*
+     * 解析在全局作用范围内的表达式，即最顶层写的，不在任何函数中的表达式
+     */
+    std::unique_ptr<FunctionAST> parseTopLevelExpr();
+
+    void handleDefinition();
+    void handleExtern();
+    void handleTopLevelExpression();
 
 public:
     ExprParser();

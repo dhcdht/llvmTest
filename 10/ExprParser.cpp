@@ -147,11 +147,10 @@ std::unique_ptr<ExprAST> ExprParser::parseNumberExpr() {
 }
 
 std::unique_ptr<ExprAST> ExprParser::parseUnary() {
-    // todo
-//    // 如果当前字符不是一个合法的一元运算符，那么交给其他解析去处理
-//    if (!isascii(m_lastToken) || m_lastToken == '(' || m_lastToken == ',') {
-//        return this->parsePrimary();
-//    }
+    // 如果当前字符不是一个合法的一元运算符，那么交给其他解析去处理
+    if (!isascii(m_lastToken) || m_lastToken == '(' || m_lastToken == ',') {
+        return this->parsePrimary();
+    }
 
     // 记录当前一元运算符的 ascii 码
     int operatorChar = m_lastToken;
@@ -455,13 +454,197 @@ std::unique_ptr<ExprAST> ExprParser::parsePrimary() {
     }
 }
 
+std::unique_ptr<PrototypeAST> ExprParser::parsePrototype() {
+    // 记录函数名
+    std::string functionName;
+    // 函数类型定义
+    enum FunctionKind {
+        // 普通函数
+                Identifier = 0,
+        // 一元运算符
+                Unary = 1,
+        // 二元运算符
+                Binary = 2,
+    };
+    // 记录函数类型
+    FunctionKind kind = Identifier;
+    // 记录二元运算符的优先级
+    unsigned binaryPrecedence = 30;
+
+    switch (m_lastToken) {
+        case token_identifier: {
+            functionName = m_lastTokenIdentifierString;
+            kind = Identifier;
+            getNextToken();
+        } break;
+
+        case token_unary: {
+            getNextToken();
+            if (!isascii(m_lastToken)) {
+                logError("Expected unary operator");
+
+                return nullptr;
+            }
+
+            functionName = "unary";
+            functionName += m_lastToken;
+            kind = Unary;
+            getNextToken();
+        } break;
+
+        case token_binary: {
+            getNextToken();
+            // binary 关键字后应该接一个运算符来定义这个运算符
+            if (!isascii(m_lastToken)) {
+                logError("Expected binary operator");
+
+                return nullptr;
+            }
+
+            functionName = "binary";
+            functionName += m_lastToken;
+            kind = Binary;
+
+            getNextToken();
+            if (token_number == m_lastToken) {
+                if (m_lastTokenNumberValue < 1 || m_lastTokenNumberValue > 100) {
+                    logError("Invalid precedence: must be 1..100");
+
+                    return nullptr;
+                }
+                binaryPrecedence = m_lastTokenNumberValue;
+                getNextToken();
+            }
+        } break;
+
+        default: {
+            logError("Expected Function name in prototype");
+
+            return nullptr;
+        } break;
+    }
+
+    // 不管是什么函数定义，函数名后边都是 (arg1 arg2) 的形式，这里记录个个参数名
+    if (m_lastToken != '(') {
+        logError("Expected '(' in prototype");
+
+        return nullptr;
+    }
+    std::vector<std::string> argNames;
+    getNextToken();
+    while (m_lastToken == token_identifier) {
+        argNames.push_back(m_lastTokenIdentifierString);
+
+        getNextToken();
+    }
+    if (m_lastToken != ')') {
+        logError("Expected ')' in prototype");
+
+        return nullptr;
+    }
+
+    // 如果函数定义是运算符，那么它的参数必须是对应的一个或者两个
+    if (kind && argNames.size() != kind) {
+        logError("Invalid number of operands for operator");
+
+        return nullptr;
+    }
+
+    // 准备给后续 parse 的下一个 token
+    getNextToken();
+
+    return llvm::make_unique<PrototypeAST>(functionName, std::move(argNames), kind != Identifier, binaryPrecedence);
+}
+
+std::unique_ptr<FunctionAST> ExprParser::parseDefinition() {
+    // 将 def 走过去
+    getNextToken();
+
+    // 解析函数的定义
+    auto prototype = parsePrototype();
+    if (!prototype) {
+        return nullptr;
+    }
+
+    // 解析函数的实现，并生成函数实现 AST 节点
+    if (auto expression = parseExpression()) {
+        return llvm::make_unique<FunctionAST>(std::move(prototype), std::move(expression));
+    }
+
+    return nullptr;
+}
+
+std::unique_ptr<PrototypeAST> ExprParser::parseExtern() {
+    // 将 extern 走过去
+    getNextToken();
+
+    return parsePrototype();
+}
+
+std::unique_ptr<FunctionAST> ExprParser::parseTopLevelExpr() {
+    if (auto expression = parseExpression()) {
+        auto prototype = llvm::make_unique<PrototypeAST>("", std::vector<std::string>());
+
+        return llvm::make_unique<FunctionAST>(std::move(prototype), std::move(expression));
+    }
+
+    return nullptr;
+}
+
+void ExprParser::handleDefinition() {
+    if (auto functionAST = parseDefinition()) {
+        if (auto *functionIR = functionAST->codegen()) {
+            fprintf(stderr, "Read function definition:");
+            functionIR->dump();
+        }
+    }
+}
+
+void ExprParser::handleExtern() {
+    if (auto protoAST = parseExtern()) {
+        if (auto protoIR = protoAST->codegen()) {
+            fprintf(stderr, "Read extern:");
+            protoIR->dump();
+        }
+    }
+}
+
+void ExprParser::handleTopLevelExpression() {
+    if (auto expressionAST = parseTopLevelExpr()) {
+        if (auto expressionIR = expressionAST->codegen()) {
+            fprintf(stderr, "Read top-level expr:");
+            expressionIR->dump();
+        }
+    }
+}
+
 void ExprParser::startParse(std::string codeString) {
     m_codeStream->str(codeString);
 
-    int c = this->getNextChar();
-    while (c != EOF) {
-        std::cout << c << std::endl;
+    while (1) {
+        getNextToken();
+        switch (m_lastToken) {
+            case token_eof: {
+                return;
+            }
 
-        c = this->getNextChar();
+            case token_def: {
+                handleDefinition();
+
+                break;
+            }
+
+            case token_extern: {
+                handleExtern();
+
+                break;
+            }
+
+            default: {
+                handleTopLevelExpression();
+
+                break;
+            }
+        }
     }
 }

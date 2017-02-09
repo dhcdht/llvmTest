@@ -129,7 +129,7 @@ static llvm::AllocaInst *createEntryBlockAlloca(llvm::Function *function, const 
 
 extern std::unique_ptr<ExprAST> logError(const char *str);
 llvm::Value *logErrorV(const char *str) {
-    logError(str);
+    fprintf(stderr, "LogErrorV: %s\n", str);
 
     return nullptr;
 }

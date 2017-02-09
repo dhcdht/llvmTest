@@ -33,30 +33,24 @@ enum Token {
 };
 
 
-ExprParser::ExprParser() {
-    m_codeStream = new std::istringstream();
-}
-
 int ExprParser::getNextChar() {
     int c = m_codeStream->get();
     return c;
 }
 
 int ExprParser::getToken() {
-    int lastChar = this->getNextChar();
-
     // 跳过空格
-    while (isspace(lastChar)) {
-        lastChar = this->getNextChar();
+    while (isspace(m_lastChar)) {
+        m_lastChar = this->getNextChar();
     }
 
     // [a-zA-Z]
-    if (isalpha(lastChar)) {
+    if (isalpha(m_lastChar)) {
         // 获取并记录当前这个字符串
-        m_lastTokenIdentifierString = lastChar;
+        m_lastTokenIdentifierString = m_lastChar;
         // [a-zA-Z0-9]
-        while (isalnum(lastChar = this->getNextChar())) {
-            m_lastTokenIdentifierString += lastChar;
+        while (isalnum(m_lastChar = this->getNextChar())) {
+            m_lastTokenIdentifierString += m_lastChar;
         }
 
         // 针对当前字符串的值进行判断，这部分都是一些语言的关键字
@@ -86,34 +80,39 @@ int ExprParser::getToken() {
         return token_identifier;
     }
     // [0-9\.]
-    else if (isdigit(lastChar) || lastChar == '.') {
+    else if (isdigit(m_lastChar) || m_lastChar == '.') {
         std::string numberString;
         do {
-            numberString += lastChar;
-            lastChar = this->getNextChar();
-        } while(isdigit(lastChar) || lastChar == '.');
+            numberString += m_lastChar;
+            m_lastChar = this->getNextChar();
+        } while(isdigit(m_lastChar) || m_lastChar == '.');
 
         m_lastTokenNumberValue = strtod(numberString.c_str(), nullptr);
 
         return token_number;
     }
     // # 开头的一行为注释
-    else if (lastChar == '#') {
+    else if (m_lastChar == '#') {
         do {
-            lastChar = this->getNextChar();
-        } while(lastChar != EOF && lastChar != '\n' && lastChar != '\r');
+            m_lastChar = this->getNextChar();
+        } while(m_lastChar != EOF && m_lastChar != '\n' && m_lastChar != '\r');
 
-        if (lastChar != EOF) {
+        if (m_lastChar != EOF) {
             return this->getToken();
         } else {
             return token_eof;
         }
     }
     else {
-        if (lastChar == EOF) {
+        if (m_lastChar == EOF) {
             return token_eof;
         } else {
-            return lastChar;
+            // 如果 m_lastChar 是一个不认识的字符，比如 '('，
+            // 那么下次解析时，m_lastChar 应该指向了下一个字符，不然会重复返回 '('
+            int thisChar = m_lastChar;
+            m_lastChar = getNextChar();
+
+            return thisChar;
         }
     }
 }
@@ -142,6 +141,7 @@ void ExprParser::logError(const char *string) {
 
 std::unique_ptr<ExprAST> ExprParser::parseNumberExpr() {
     auto result = llvm::make_unique<NumberExprAST>(m_lastTokenNumberValue);
+    getNextToken();
 
     return std::move(result);
 }
@@ -226,6 +226,9 @@ std::unique_ptr<ExprAST> ExprParser::parseParentExpr() {
         return nullptr;
     }
 
+    // 下次该解析 ')' 后边的东西了，这个 getNextToken 提前拿出 ‘)’
+    getNextToken();
+
     return v;
 }
 
@@ -261,6 +264,9 @@ std::unique_ptr<ExprAST> ExprParser::parseIdentifierExpr() {
             getNextToken();
         }
     }
+
+    // 下次该解析 ')' 后边的东西了，这个 getNextToken 提前拿出 ‘)’
+    getNextToken();
 
     return llvm::make_unique<CallExprAST>(identifierName, std::move(args));
 }
@@ -619,7 +625,10 @@ void ExprParser::handleTopLevelExpression() {
 }
 
 void ExprParser::startParse(std::string codeString) {
+    m_codeStream = new std::istringstream();
     m_codeStream->str(codeString);
+    m_lastChar = ' ';
+    m_lastToken = 0;
 
     while (1) {
         getNextToken();

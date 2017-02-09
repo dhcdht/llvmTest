@@ -15,6 +15,8 @@ private:
     /// 输入的代码字符串流
     std::istringstream *m_codeStream;
 
+    /// 当前解析器遍历到的最新字符
+    int m_lastChar;
     /// 当前解析器当前正在解析的 token
     int m_lastToken;
     /// m_lastToken 为 token_identifier 时，记下当前的 token 字符串
@@ -114,8 +116,6 @@ private:
     void handleTopLevelExpression();
 
 public:
-    ExprParser();
-
     void startParse(std::string codeString);
 
 };

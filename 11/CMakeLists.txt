@@ -10,12 +10,17 @@ find_package(LLVM REQUIRED CONFIG)
 #link_directories(${LLVM_LIBRARY_DIRS})
 llvm_map_components_to_libnames(llvm_libs
         core
-        nativecodegen)
+        nativecodegen
+        executionengine)
 link_libraries(${llvm_libs})
 
 set(SOURCE_FILES
         toy.cpp
         ExprAST.cpp
-        ExprAST.h ExprParser.cpp ExprParser.h)
+        ExprAST.h
+        ExprParser.cpp
+        ExprParser.h
+        KaleidoscopeJIT.cpp
+        KaleidoscopeJIT.h)
 
 add_executable(llvmTest11 ${SOURCE_FILES})

@@ -11,7 +11,7 @@ find_package(LLVM REQUIRED CONFIG)
 llvm_map_components_to_libnames(llvm_libs
         core
         nativecodegen
-        executionengine)
+        all)
 link_libraries(${llvm_libs})
 
 set(SOURCE_FILES

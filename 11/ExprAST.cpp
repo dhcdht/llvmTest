@@ -27,6 +27,18 @@ static std::map<std::string, llvm::AllocaInst *> kNamedValue;
 static std::unique_ptr<llvm::DIBuilder> kDebugBuilder;
 
 
+std::unique_ptr<llvm::Module>
+irgenAndTakeOwnership(FunctionAST &FnAST, const std::string &Suffix) {
+    if (auto *F = FnAST.codegen()) {
+        F->setName(F->getName() + Suffix);
+        auto M = std::move(kTheModule);
+        return M;
+    } else {
+        llvm::report_fatal_error("Couldn't compile lazily JIT'd function");
+    }
+}
+
+
 struct DebugInfo {
     llvm::DICompileUnit *compileUnit;
     llvm::DIType *debugInfoType;
@@ -650,6 +662,10 @@ llvm::Function* FunctionAST::codegen() {
     // 函数实现创建有问题的时候，去掉模块中对应的函数定义
     theFunction->eraseFromParent();
     return nullptr;
+}
+
+std::string FunctionAST::getName() {
+    return m_prototype.get()->getName();
 }
 
 llvm::raw_ostream& FunctionAST::dump(llvm::raw_ostream &out, int index) {

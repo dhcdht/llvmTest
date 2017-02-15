@@ -267,6 +267,8 @@ private:
 public:
     FunctionAST(std::unique_ptr<PrototypeAST> prototype, std::unique_ptr<ExprAST> body);
 
+    std::string getName();
+
     llvm::raw_ostream &dump(llvm::raw_ostream &out, int index);
 
     llvm::Function *codegen();

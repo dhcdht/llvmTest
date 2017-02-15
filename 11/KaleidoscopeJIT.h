@@ -16,6 +16,8 @@
 #include "llvm/ExecutionEngine/Orc/CompileOnDemandLayer.h"
 #include "llvm/IR/Mangler.h"
 #include "llvm/Support/DynamicLibrary.h"
+#include "llvm/Support/Error.h"
+#include "ExprAST.h"
 
 
 class KaleidoscopeJIT {
@@ -33,6 +35,9 @@ private:
     std::unique_ptr<llvm::orc::JITCompileCallbackManager> m_compileCallbackMgr;
     std::unique_ptr<llvm::orc::IndirectStubsManager> m_indirectStubsMgr;
 
+private:
+    std::string mangle(const std::string &name);
+
 public:
     typedef decltype(m_optimizeLayer)::ModuleSetHandleT ModuleHandleT;
     KaleidoscopeJIT();
@@ -46,6 +51,8 @@ public:
     llvm::orc::JITSymbol findSymbol(const std::string aName);
 
     std::unique_ptr<llvm::Module> optimizeModule(std::unique_ptr<llvm::Module> module);
+
+    llvm::Error addFunctionAST(std::unique_ptr<FunctionAST> functionAST);
 };
 
 
